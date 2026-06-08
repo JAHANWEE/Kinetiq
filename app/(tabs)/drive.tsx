@@ -6,7 +6,8 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { MaterialIcons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
-import Svg, { Circle, Defs, LinearGradient, Stop } from 'react-native-svg';
+import { LinearGradient } from 'expo-linear-gradient';
+import Svg, { Circle, Defs, LinearGradient as SvgLinearGradient, Stop } from 'react-native-svg';
 import { Spacing, BorderRadius } from '../../constants/Spacing';
 import { useDriveSession, SensorReadings } from '../../hooks/useDriveSession';
 import { DriveEvent } from '../../store/driveStore';
@@ -15,9 +16,9 @@ import type { ThemeColors } from '../../constants/Colors';
 
 const W = Dimensions.get('window').width;
 
-// GIF: 400 × 143 px — used as a mood card, not a banner
-const GIF_W = W - Spacing.containerMargin * 2;
-const GIF_H = Math.round(GIF_W / (400 / 143)); // preserves aspect ratio
+// GIF: 400 × 143 px — full screen width hero
+const GIF_W = W;
+const GIF_H = Math.round(W / (400 / 143)); // preserves aspect ratio
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 const pad = (n: number) => n.toString().padStart(2, '0');
@@ -190,32 +191,51 @@ function Active({ score, durationSec, events, sensors, onEnd }: {
   const elapsed = durationSec * 1000;
   const accelMag = mag(sensors.accel.x, sensors.accel.y, sensors.accel.z);
   const gyroMag  = mag(sensors.gyro.x,  sensors.gyro.y,  sensors.gyro.z);
+  // Gradient stops: transparent at top → bg color at bottom for seamless merge
+  const gradColors: [string, string, string] = [
+    'transparent',
+    T.bg + 'CC',   // ~80% at mid
+    T.bg,          // fully opaque at bottom
+  ];
 
   return (
     <SafeAreaView style={[{ flex: 1, backgroundColor: T.bg }]}>
-      {/* Fixed top section — never scrolls */}
-      <View style={ac.topSection}>
-        {/* Header */}
-        <View style={[ac.header, { paddingHorizontal: Spacing.containerMargin }]}>
-          <View style={[ac.livePill, { backgroundColor: T.ok + '20' }]}>
+
+      {/* ── Full-width GIF hero with overlay ──────────────────────────────── */}
+      <View style={ac.gifHero}>
+        {/* GIF — full screen width, no radius, no margin */}
+        <Image
+          source={require('../../assets/city_car.gif')}
+          style={ac.gif}
+          contentFit="cover"
+          autoplay
+          cachePolicy="none"
+        />
+
+        {/* Dark overlay for readability */}
+        <View style={ac.gifDark} />
+
+        {/* Gradient fade: GIF bottom bleeds into page bg */}
+        <LinearGradient
+          colors={gradColors}
+          locations={[0, 0.55, 1]}
+          style={ac.gifGradient}
+        />
+
+        {/* Content on top of the GIF */}
+        <View style={ac.gifContent}>
+          {/* LIVE pill */}
+          <View style={[ac.livePill, { backgroundColor: T.ok + '28' }]}>
             <View style={[ac.liveDot, { backgroundColor: T.ok }]} />
             <Text style={[ac.liveText, { color: T.ok }]}>LIVE</Text>
           </View>
-          <Text style={[ac.headerTitle, { color: T.textMuted }]}>Kinetiq Drive</Text>
+          {/* Title */}
+          <Text style={ac.gifTitle}>Kinetiq Drive</Text>
         </View>
+      </View>
 
-        {/* City GIF */}
-        <View style={[ac.gifCard, { marginHorizontal: Spacing.containerMargin, backgroundColor: T.card }]}>
-          <Image
-            source={require('../../assets/city_car.gif')}
-            style={ac.gif}
-            contentFit="cover"
-            autoplay
-            cachePolicy="none"
-          />
-          <View style={ac.gifOverlay} />
-        </View>
-
+      {/* ── Fixed cards below the GIF ─────────────────────────────────────── */}
+      <View style={ac.topSection}>
         {/* Score card */}
         <View style={[ac.scoreCard, { marginHorizontal: Spacing.containerMargin, backgroundColor: T.card }]}>
           <ScoreDisplay score={score} T={T} />
@@ -249,13 +269,10 @@ function Active({ score, durationSec, events, sensors, onEnd }: {
         </View>
       </View>
 
-      {/* Events — flex: 1, scrollable when content overflows */}
+      {/* ── Events scrollable ─────────────────────────────────────────────── */}
       <ScrollView
         style={ac.evtScroll}
-        contentContainerStyle={[
-          ac.evtContent,
-          { paddingHorizontal: Spacing.containerMargin },
-        ]}
+        contentContainerStyle={[ac.evtContent, { paddingHorizontal: Spacing.containerMargin }]}
         showsVerticalScrollIndicator={false}
       >
         {events.length > 0 ? (
@@ -271,7 +288,7 @@ function Active({ score, durationSec, events, sensors, onEnd }: {
         )}
       </ScrollView>
 
-      {/* End Drive — always visible at bottom */}
+      {/* ── End Drive pinned ─────────────────────────────────────────────── */}
       <View style={[ac.endWrap, { paddingHorizontal: Spacing.containerMargin, backgroundColor: T.bg }]}>
         <TouchableOpacity
           style={[ac.endBtn, { backgroundColor: T.bad + '18', borderColor: T.bad + '40' }]}
@@ -287,19 +304,22 @@ function Active({ score, durationSec, events, sensors, onEnd }: {
 }
 
 const ac = StyleSheet.create({
-  // Fixed top block
-  topSection:  { gap: 10, paddingTop: Spacing.sm },
-
-  header:      { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 6 },
+  // ── GIF hero (full-width, edge-to-edge) ──
+  gifHero:     { width: W, height: GIF_H + 28, position: 'relative' },
+  gif:         { width: W, height: GIF_H + 28 },
+  gifDark:     { ...StyleSheet.absoluteFill, backgroundColor: '#00000050' },
+  gifGradient: { position: 'absolute', left: 0, right: 0, bottom: 0, height: (GIF_H + 28) * 0.65 },
+  gifContent:  {
+    position: 'absolute', left: Spacing.containerMargin, right: Spacing.containerMargin,
+    bottom: 14, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+  },
   livePill:    { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 10, paddingVertical: 4, borderRadius: BorderRadius.full },
   liveDot:     { width: 6, height: 6, borderRadius: 3 },
   liveText:    { fontSize: 10, fontWeight: '800', letterSpacing: 1 },
-  headerTitle: { fontSize: 13, fontWeight: '600' },
+  gifTitle:    { fontSize: 13, fontWeight: '700', color: 'rgba(255,255,255,0.75)', letterSpacing: 0.2 },
 
-  gifCard:     { borderRadius: BorderRadius.lg, overflow: 'hidden' },
-  gif:         { width: GIF_W, height: GIF_H },
-  gifOverlay:  { position: 'absolute', inset: 0, backgroundColor: '#00000018' } as any,
-
+  // ── Fixed cards ──
+  topSection:  { gap: 10, paddingTop: 10 },
   scoreCard:   { borderRadius: BorderRadius.lg, padding: 14, gap: 10 },
   scoreDivider:{ height: 1 },
   statsRow:    { flexDirection: 'row', alignItems: 'center' },
@@ -307,17 +327,16 @@ const ac = StyleSheet.create({
   statV:       { fontSize: 17, fontWeight: '800', letterSpacing: -0.5 },
   statL:       { fontSize: 10, fontWeight: '500' },
   statDiv:     { width: 1, height: 22 },
-
   sensorCard:  { borderRadius: BorderRadius.md, padding: Spacing.md, gap: 10 },
   cardLabel:   { fontSize: 10, fontWeight: '700', letterSpacing: 1.2, textTransform: 'uppercase', marginBottom: 2 },
 
-  // Scrollable events section
+  // ── Events ──
   evtScroll:   { flex: 1, marginTop: 10 },
   evtContent:  { paddingBottom: 8 },
   evtCard:     { borderRadius: BorderRadius.md, padding: Spacing.md },
   evtEmpty:    { fontSize: 13, textAlign: 'center', paddingVertical: 16 },
 
-  // Pinned End Drive button
+  // ── End Drive ──
   endWrap:     { paddingVertical: 12 },
   endBtn:      { borderRadius: BorderRadius.lg, paddingVertical: 16, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, borderWidth: 1 },
   endTxt:      { fontSize: 15, fontWeight: '700' },
@@ -352,10 +371,10 @@ function Summary({ session, onDone }: {
           <View style={{ width: RS, height: RS, justifyContent: 'center', alignItems: 'center' }}>
             <Svg width={RS} height={RS} style={{ transform: [{ rotate: '-90deg' }] }}>
               <Defs>
-                <LinearGradient id="sg" x1="0" y1="0" x2="1" y2="0">
+                <SvgLinearGradient id="sg" x1="0" y1="0" x2="1" y2="0">
                   <Stop offset="0" stopColor={c} stopOpacity="0.3" />
                   <Stop offset="1" stopColor={c} stopOpacity="1" />
-                </LinearGradient>
+                </SvgLinearGradient>
               </Defs>
               <Circle cx={mid} cy={mid} r={RR} stroke={T.sep} strokeWidth={8} fill="none" />
               <Circle cx={mid} cy={mid} r={RR} stroke="url(#sg)" strokeWidth={8} fill="none"
