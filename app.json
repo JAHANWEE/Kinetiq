@@ -1,9 +1,9 @@
 {
   "expo": {
-    "name": "DriveSense",
-    "slug": "DriveSense",
+    "name": "Kinetiq",
+    "slug": "Kinetiq",
     "version": "1.0.0",
-    "scheme": "drivesense",
+    "scheme": "kinetiq",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "dark",
@@ -20,7 +20,13 @@
     },
     "plugins": [
       "expo-router",
-      "expo-status-bar"
+      "expo-status-bar",
+      [
+        "expo-sensors",
+        {
+          "motionPermission": "Allow Kinetiq to access your device motion to analyze driving behavior."
+        }
+      ]
     ]
   }
 }
