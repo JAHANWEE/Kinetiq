@@ -63,10 +63,10 @@ function ScoreDisplay({ score, T }: { score: number; T: ThemeColors }) {
   );
 }
 const sd = StyleSheet.create({
-  wrap:  { flexDirection: 'row', alignItems: 'center', gap: 12 },
-  num:   { fontSize: 64, fontWeight: '800', letterSpacing: -4, lineHeight: 68 },
+  wrap:  { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  num:   { fontSize: 44, fontWeight: '800', letterSpacing: -3, lineHeight: 48 },
   right: { gap: 2 },
-  grade: { fontSize: 18, fontWeight: '700', letterSpacing: -0.3 },
+  grade: { fontSize: 15, fontWeight: '700', letterSpacing: -0.2 },
   label: { fontSize: 10, fontWeight: '600', letterSpacing: 1.2, textTransform: 'uppercase' },
 });
 
@@ -193,12 +193,10 @@ function Active({ score, durationSec, events, sensors, onEnd }: {
 
   return (
     <SafeAreaView style={[{ flex: 1, backgroundColor: T.bg }]}>
-      <ScrollView
-        contentContainerStyle={ac.scroll}
-        showsVerticalScrollIndicator={false}
-      >
-        {/* ── Header ──────────────────────────────────────────────────────── */}
-        <View style={ac.header}>
+      {/* Fixed top section — never scrolls */}
+      <View style={ac.topSection}>
+        {/* Header */}
+        <View style={[ac.header, { paddingHorizontal: Spacing.containerMargin }]}>
           <View style={[ac.livePill, { backgroundColor: T.ok + '20' }]}>
             <View style={[ac.liveDot, { backgroundColor: T.ok }]} />
             <Text style={[ac.liveText, { color: T.ok }]}>LIVE</Text>
@@ -206,8 +204,20 @@ function Active({ score, durationSec, events, sensors, onEnd }: {
           <Text style={[ac.headerTitle, { color: T.textMuted }]}>Kinetiq Drive</Text>
         </View>
 
-        {/* ── Score card ───────────────────────────────────────────────────── */}
-        <View style={[ac.scoreCard, { backgroundColor: T.card }]}>
+        {/* City GIF */}
+        <View style={[ac.gifCard, { marginHorizontal: Spacing.containerMargin, backgroundColor: T.card }]}>
+          <Image
+            source={require('../../assets/city_car.gif')}
+            style={ac.gif}
+            contentFit="cover"
+            autoplay
+            cachePolicy="none"
+          />
+          <View style={ac.gifOverlay} />
+        </View>
+
+        {/* Score card */}
+        <View style={[ac.scoreCard, { marginHorizontal: Spacing.containerMargin, backgroundColor: T.card }]}>
           <ScoreDisplay score={score} T={T} />
           <View style={[ac.scoreDivider, { backgroundColor: T.sep }]} />
           <View style={ac.statsRow}>
@@ -231,37 +241,38 @@ function Active({ score, durationSec, events, sensors, onEnd }: {
           </View>
         </View>
 
-        {/* ── City GIF — contextual mood card ─────────────────────────────── */}
-        <View style={[ac.gifCard, { backgroundColor: T.card }]}>
-          <Image
-            source={require('../../assets/city_car.gif')}
-            style={ac.gif}
-            contentFit="cover"
-            autoplay
-            cachePolicy="none"
-          />
-          <View style={ac.gifOverlay} />
-        </View>
-
-        {/* ── Sensors (compact — magnitude only, 2 rows) ───────────────────── */}
-        <View style={[ac.sensorCard, { backgroundColor: T.card }]}>
+        {/* Sensors */}
+        <View style={[ac.sensorCard, { marginHorizontal: Spacing.containerMargin, backgroundColor: T.card }]}>
           <Text style={[ac.cardLabel, { color: T.textMuted }]}>SENSORS</Text>
-          <SensorMini label="Accel" value={accelMag} max={3}  T={T} />
-          <SensorMini label="Gyro"  value={gyroMag}  max={4}  T={T} />
+          <SensorMini label="Accel" value={accelMag} max={3} T={T} />
+          <SensorMini label="Gyro"  value={gyroMag}  max={4} T={T} />
         </View>
+      </View>
 
-        {/* ── Events ───────────────────────────────────────────────────────── */}
-        {events.length > 0 && (
+      {/* Events — flex: 1, scrollable when content overflows */}
+      <ScrollView
+        style={ac.evtScroll}
+        contentContainerStyle={[
+          ac.evtContent,
+          { paddingHorizontal: Spacing.containerMargin },
+        ]}
+        showsVerticalScrollIndicator={false}
+      >
+        {events.length > 0 ? (
           <View style={[ac.evtCard, { backgroundColor: T.card }]}>
             <Text style={[ac.cardLabel, { color: T.textMuted }]}>EVENTS</Text>
-            {events.slice(0, 6).map((e, i) => (
+            {events.map((e, i) => (
               <EvtRow key={e.id} e={e} elapsed={elapsed} T={T}
-                last={i === Math.min(5, events.length - 1)} />
+                last={i === events.length - 1} />
             ))}
           </View>
+        ) : (
+          <Text style={[ac.evtEmpty, { color: T.textMuted }]}>No events yet</Text>
         )}
+      </ScrollView>
 
-        {/* ── End Drive — inline, NOT floating ────────────────────────────── */}
+      {/* End Drive — always visible at bottom */}
+      <View style={[ac.endWrap, { paddingHorizontal: Spacing.containerMargin, backgroundColor: T.bg }]}>
         <TouchableOpacity
           style={[ac.endBtn, { backgroundColor: T.bad + '18', borderColor: T.bad + '40' }]}
           onPress={onEnd}
@@ -270,39 +281,46 @@ function Active({ score, durationSec, events, sensors, onEnd }: {
           <MaterialIcons name="stop-circle" size={20} color={T.bad} />
           <Text style={[ac.endTxt, { color: T.bad }]}>End Drive</Text>
         </TouchableOpacity>
-      </ScrollView>
+      </View>
     </SafeAreaView>
   );
 }
 
 const ac = StyleSheet.create({
-  scroll:     { padding: Spacing.containerMargin, gap: 12, paddingBottom: 40 },
+  // Fixed top block
+  topSection:  { gap: 10, paddingTop: Spacing.sm },
 
-  header:     { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 4 },
-  livePill:   { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 10, paddingVertical: 4, borderRadius: BorderRadius.full },
-  liveDot:    { width: 6, height: 6, borderRadius: 3 },
-  liveText:   { fontSize: 10, fontWeight: '800', letterSpacing: 1 },
-  headerTitle:{ fontSize: 13, fontWeight: '600' },
+  header:      { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 6 },
+  livePill:    { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 10, paddingVertical: 4, borderRadius: BorderRadius.full },
+  liveDot:     { width: 6, height: 6, borderRadius: 3 },
+  liveText:    { fontSize: 10, fontWeight: '800', letterSpacing: 1 },
+  headerTitle: { fontSize: 13, fontWeight: '600' },
 
-  scoreCard:  { borderRadius: BorderRadius.lg, padding: Spacing.md, gap: 14 },
+  gifCard:     { borderRadius: BorderRadius.lg, overflow: 'hidden' },
+  gif:         { width: GIF_W, height: GIF_H },
+  gifOverlay:  { position: 'absolute', inset: 0, backgroundColor: '#00000018' } as any,
+
+  scoreCard:   { borderRadius: BorderRadius.lg, padding: 14, gap: 10 },
   scoreDivider:{ height: 1 },
-  statsRow:   { flexDirection: 'row', alignItems: 'center' },
-  statItem:   { flex: 1, alignItems: 'center', gap: 2 },
-  statV:      { fontSize: 17, fontWeight: '800', letterSpacing: -0.5 },
-  statL:      { fontSize: 10, fontWeight: '500' },
-  statDiv:    { width: 1, height: 22 },
+  statsRow:    { flexDirection: 'row', alignItems: 'center' },
+  statItem:    { flex: 1, alignItems: 'center', gap: 2 },
+  statV:       { fontSize: 17, fontWeight: '800', letterSpacing: -0.5 },
+  statL:       { fontSize: 10, fontWeight: '500' },
+  statDiv:     { width: 1, height: 22 },
 
-  gifCard:    { borderRadius: BorderRadius.lg, overflow: 'hidden' },
-  gif:        { width: GIF_W, height: GIF_H },
-  gifOverlay: { position: 'absolute', inset: 0, backgroundColor: '#00000018' } as any,
+  sensorCard:  { borderRadius: BorderRadius.md, padding: Spacing.md, gap: 10 },
+  cardLabel:   { fontSize: 10, fontWeight: '700', letterSpacing: 1.2, textTransform: 'uppercase', marginBottom: 2 },
 
-  sensorCard: { borderRadius: BorderRadius.md, padding: Spacing.md, gap: 10 },
-  cardLabel:  { fontSize: 10, fontWeight: '700', letterSpacing: 1.2, textTransform: 'uppercase', marginBottom: 2 },
+  // Scrollable events section
+  evtScroll:   { flex: 1, marginTop: 10 },
+  evtContent:  { paddingBottom: 8 },
+  evtCard:     { borderRadius: BorderRadius.md, padding: Spacing.md },
+  evtEmpty:    { fontSize: 13, textAlign: 'center', paddingVertical: 16 },
 
-  evtCard:    { borderRadius: BorderRadius.md, padding: Spacing.md, gap: 0 },
-
-  endBtn:     { borderRadius: BorderRadius.lg, paddingVertical: 16, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, borderWidth: 1, marginTop: 4 },
-  endTxt:     { fontSize: 15, fontWeight: '700' },
+  // Pinned End Drive button
+  endWrap:     { paddingVertical: 12 },
+  endBtn:      { borderRadius: BorderRadius.lg, paddingVertical: 16, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, borderWidth: 1 },
+  endTxt:      { fontSize: 15, fontWeight: '700' },
 });
 
 // ─── SUMMARY ──────────────────────────────────────────────────────────────────
