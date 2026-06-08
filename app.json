@@ -26,7 +26,8 @@
         {
           "motionPermission": "Allow Kinetiq to access your device motion to analyze driving behavior."
         }
-      ]
+      ],
+      "expo-image"
     ]
   }
 }

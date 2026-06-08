@@ -1,65 +1,60 @@
 import React, { useEffect, useState, useCallback } from 'react';
-import {
-  View, Text, ScrollView, StyleSheet,
-  TouchableOpacity, Switch, Modal, Alert, Linking,
-} from 'react-native';
+import { View, Text, ScrollView, StyleSheet, TouchableOpacity, Switch, Modal, Alert, Linking } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { MaterialIcons } from '@expo/vector-icons';
 import Constants from 'expo-constants';
-import { Colors } from '../../constants/Colors';
-import { Typography } from '../../constants/Typography';
 import { Spacing, BorderRadius } from '../../constants/Spacing';
 import { settingsStore, Sensitivity } from '../../store/settingsStore';
 import { driveStore } from '../../store/driveStore';
+import { useTheme } from '../../hooks/useTheme';
+import type { ThemeColors } from '../../constants/Colors';
 
 type MIName = React.ComponentProps<typeof MaterialIcons>['name'];
 
 // ─── Row ──────────────────────────────────────────────────────────────────────
-function Row({
-  icon, label, last = false, right, onPress, destructive = false,
-}: {
-  icon: MIName; label: string; last?: boolean;
-  right?: React.ReactNode; onPress?: () => void; destructive?: boolean;
+function Row({ icon, label, right, onPress, destructive, last, T }: {
+  icon: MIName; label: string; right?: React.ReactNode;
+  onPress?: () => void; destructive?: boolean; last?: boolean; T: ThemeColors;
 }) {
   const Wrap: any = onPress ? TouchableOpacity : View;
   return (
-    <Wrap onPress={onPress} activeOpacity={0.6} style={[row.wrap, !last && row.border]}>
-      <View style={row.left}>
-        <View style={[row.iconBox, { backgroundColor: destructive ? Colors.dangerDim : Colors.primaryDim }]}>
-          <MaterialIcons name={icon} size={17} color={destructive ? Colors.danger : Colors.primary} />
+    <Wrap onPress={onPress} activeOpacity={0.6}
+      style={[r.wrap, !last && { borderBottomColor: T.sep, borderBottomWidth: 1 }]}>
+      <View style={r.left}>
+        <View style={[r.ico, { backgroundColor: destructive ? T.badSoft : T.accentSoft }]}>
+          <MaterialIcons name={icon} size={16} color={destructive ? T.bad : T.accent} />
         </View>
-        <Text style={[row.label, destructive && { color: Colors.danger }]}>{label}</Text>
+        <Text style={[r.lbl, { color: destructive ? T.bad : T.text }]}>{label}</Text>
       </View>
-      {right ?? <MaterialIcons name="chevron-right" size={17} color={Colors.onSurfaceMuted} />}
+      {right ?? <MaterialIcons name="chevron-right" size={16} color={T.textMuted} />}
     </Wrap>
   );
 }
-const row = StyleSheet.create({
-  wrap: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: Spacing.md, paddingVertical: 14 },
-  border: { borderBottomWidth: 1, borderBottomColor: Colors.border },
-  left: { flexDirection: 'row', alignItems: 'center', gap: 12, flex: 1 },
-  iconBox: { width: 30, height: 30, borderRadius: 8, justifyContent: 'center', alignItems: 'center' },
-  label: { ...Typography.bodyMd, color: Colors.onSurface },
+const r = StyleSheet.create({
+  wrap:  { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: Spacing.md, paddingVertical: 14 },
+  left:  { flexDirection: 'row', alignItems: 'center', gap: 12, flex: 1 },
+  ico:   { width: 30, height: 30, borderRadius: 8, justifyContent: 'center', alignItems: 'center' },
+  lbl:   { fontSize: 15, fontWeight: '500' },
 });
 
-// ─── Sheet backdrop ───────────────────────────────────────────────────────────
-function Sheet({ visible, onClose, children }: { visible: boolean; onClose: () => void; children: React.ReactNode }) {
+// ─── Bottom sheet ─────────────────────────────────────────────────────────────
+function Sheet({ visible, onClose, T, children }: {
+  visible: boolean; onClose: () => void; T: ThemeColors; children: React.ReactNode;
+}) {
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
-      <TouchableOpacity style={sh.back} activeOpacity={1} onPress={onClose} />
-      <View style={sh.sheet}>{children}</View>
+      <TouchableOpacity style={{ flex: 1, backgroundColor: '#00000060' }} activeOpacity={1} onPress={onClose} />
+      <View style={[sh.sheet, { backgroundColor: T.overlay }]}>{children}</View>
     </Modal>
   );
 }
 const sh = StyleSheet.create({
-  back: { flex: 1, backgroundColor: '#00000070' },
-  sheet: { backgroundColor: Colors.surfaceElevated, borderTopLeftRadius: 26, borderTopRightRadius: 26, padding: Spacing.lg, paddingBottom: 40, gap: Spacing.sm },
+  sheet: { borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: Spacing.lg, paddingBottom: 36, gap: 12 },
 });
 
 // ─── Sensitivity sheet ────────────────────────────────────────────────────────
-function SensitivitySheet({ visible, current, onSelect, onClose }: {
-  visible: boolean; current: Sensitivity;
-  onSelect: (v: Sensitivity) => void; onClose: () => void;
+function SensSheet({ visible, current, onSelect, onClose, T }: {
+  visible: boolean; current: Sensitivity; onSelect: (v: Sensitivity) => void; onClose: () => void; T: ThemeColors;
 }) {
   const opts: { value: Sensitivity; label: string; desc: string }[] = [
     { value: 'low',    label: 'Low',    desc: 'More forgiving — fewer events flagged' },
@@ -67,103 +62,97 @@ function SensitivitySheet({ visible, current, onSelect, onClose }: {
     { value: 'high',   label: 'High',   desc: 'Strict — flags smaller manoeuvres' },
   ];
   return (
-    <Sheet visible={visible} onClose={onClose}>
-      <Text style={ss.title}>Detection Sensitivity</Text>
-      <Text style={ss.sub}>Controls how aggressively sensors flag driving events.</Text>
+    <Sheet visible={visible} onClose={onClose} T={T}>
+      <Text style={[sns.title, { color: T.text }]}>Detection Sensitivity</Text>
+      <Text style={[sns.sub, { color: T.textSub }]}>Controls how aggressively sensors flag driving events.</Text>
       {opts.map((o, i) => (
-        <TouchableOpacity
-          key={o.value}
-          style={[ss.opt, i < opts.length - 1 && ss.optBorder]}
-          onPress={() => { onSelect(o.value); onClose(); }}
-          activeOpacity={0.65}
-        >
-          <View style={ss.optLeft}>
-            <Text style={ss.optLabel}>{o.label}</Text>
-            <Text style={ss.optDesc}>{o.desc}</Text>
+        <TouchableOpacity key={o.value}
+          style={[sns.opt, i < opts.length - 1 && { borderBottomColor: T.sep, borderBottomWidth: 1 }]}
+          onPress={() => { onSelect(o.value); onClose(); }} activeOpacity={0.65}>
+          <View>
+            <Text style={[sns.optL, { color: T.text }]}>{o.label}</Text>
+            <Text style={[sns.optD, { color: T.textMuted }]}>{o.desc}</Text>
           </View>
           {current === o.value
-            ? <View style={ss.check}><MaterialIcons name="check" size={15} color={Colors.onPrimary} /></View>
-            : <View style={ss.checkEmpty} />}
+            ? <View style={[sns.check, { backgroundColor: T.accent }]}><MaterialIcons name="check" size={14} color={T.accentText} /></View>
+            : <View style={[sns.checkEmpty, { borderColor: T.sepStrong }]} />}
         </TouchableOpacity>
       ))}
-      <TouchableOpacity style={ss.cancel} onPress={onClose} activeOpacity={0.6}>
-        <Text style={ss.cancelText}>Cancel</Text>
+      <TouchableOpacity style={[sns.cancel, { backgroundColor: T.cardAlt }]} onPress={onClose} activeOpacity={0.6}>
+        <Text style={[sns.cancelTxt, { color: T.textSub }]}>Cancel</Text>
       </TouchableOpacity>
     </Sheet>
   );
 }
-const ss = StyleSheet.create({
-  title: { ...Typography.headlineMd, color: Colors.onSurface },
-  sub: { ...Typography.bodySm, color: Colors.onSurfaceSecondary, marginBottom: Spacing.sm },
-  opt: { paddingVertical: 14, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  optBorder: { borderBottomWidth: 1, borderBottomColor: Colors.border },
-  optLeft: { gap: 2 },
-  optLabel: { ...Typography.bodyMd, color: Colors.onSurface, fontWeight: '600' },
-  optDesc: { ...Typography.caption, color: Colors.onSurfaceSecondary },
-  check: { width: 24, height: 24, borderRadius: 12, backgroundColor: Colors.primary, justifyContent: 'center', alignItems: 'center' },
-  checkEmpty: { width: 24, height: 24, borderRadius: 12, borderWidth: 2, borderColor: Colors.borderStrong },
-  cancel: { marginTop: Spacing.sm, paddingVertical: 14, alignItems: 'center', backgroundColor: Colors.surfaceHighlight, borderRadius: BorderRadius.default },
-  cancelText: { ...Typography.bodyMd, color: Colors.onSurfaceSecondary },
+const sns = StyleSheet.create({
+  title:      { fontSize: 20, fontWeight: '800', letterSpacing: -0.5 },
+  sub:        { fontSize: 13, lineHeight: 19, marginBottom: 4 },
+  opt:        { paddingVertical: 13, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  optL:       { fontSize: 15, fontWeight: '600' },
+  optD:       { fontSize: 12, marginTop: 1 },
+  check:      { width: 24, height: 24, borderRadius: 12, justifyContent: 'center', alignItems: 'center' },
+  checkEmpty: { width: 24, height: 24, borderRadius: 12, borderWidth: 2 },
+  cancel:     { paddingVertical: 14, alignItems: 'center', borderRadius: BorderRadius.default, marginTop: 4 },
+  cancelTxt:  { fontSize: 15, fontWeight: '600' },
 });
 
 // ─── About sheet ──────────────────────────────────────────────────────────────
-function AboutSheet({ visible, onClose }: { visible: boolean; onClose: () => void }) {
+function AboutSheet({ visible, onClose, T }: { visible: boolean; onClose: () => void; T: ThemeColors }) {
   const rows = [
-    { name: 'Harsh Brake / Accel', trigger: '> 1.8 g × sensitivity', pts: '−5' },
-    { name: 'Sharp Turn (Z axis)', trigger: '> 1.2 rad/s × mult',     pts: '−3' },
-    { name: 'Aggressive Steering', trigger: '> 2.0 rad/s × mult',     pts: '−3' },
-    { name: 'Phone Handling',      trigger: 'accel > 2.5 + gyro > 1.5', pts: '−10' },
+    { name: 'Harsh Brake / Accel', trigger: '> 1.8 g × sensitivity',     pts: '−5' },
+    { name: 'Sharp Turn (gyro Z)', trigger: '> 1.2 rad/s × multiplier',   pts: '−3' },
+    { name: 'Aggressive Steering', trigger: '> 2.0 rad/s × multiplier',   pts: '−3' },
+    { name: 'Phone Handling',      trigger: 'accel > 2.5 + gyro > 1.5',   pts: '−10' },
   ];
   return (
-    <Sheet visible={visible} onClose={onClose}>
-      {/* App identity */}
-      <View style={ab.head}>
-        <View style={ab.icon}><MaterialIcons name="speed" size={22} color={Colors.primary} /></View>
+    <Sheet visible={visible} onClose={onClose} T={T}>
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+        <View style={[ab.icon, { backgroundColor: T.accentSoft }]}>
+          <MaterialIcons name="speed" size={20} color={T.accent} />
+        </View>
         <View>
-          <Text style={ab.appName}>Kinetiq</Text>
-          <Text style={ab.version}>v{Constants.expoConfig?.version ?? '1.0.0'}</Text>
+          <Text style={[ab.name, { color: T.text }]}>Kinetiq</Text>
+          <Text style={[ab.ver, { color: T.textMuted }]}>v{Constants.expoConfig?.version ?? '1.0.0'}</Text>
         </View>
       </View>
-      {/* Thresholds */}
-      <Text style={ab.sectionLabel}>DETECTION THRESHOLDS</Text>
-      {rows.map((r, i) => (
-        <View key={r.name} style={[ab.thRow, i < rows.length - 1 && ab.thBorder]}>
+      <Text style={[ab.sec, { color: T.textMuted }]}>DETECTION THRESHOLDS</Text>
+      {rows.map((row, i) => (
+        <View key={row.name}
+          style={[ab.tr, i < rows.length - 1 && { borderBottomColor: T.sep, borderBottomWidth: 1 }]}>
           <View style={{ flex: 1 }}>
-            <Text style={ab.thName}>{r.name}</Text>
-            <Text style={ab.thTrigger}>{r.trigger}</Text>
+            <Text style={[ab.trName, { color: T.text }]}>{row.name}</Text>
+            <Text style={[ab.trTrig, { color: T.textMuted }]}>{row.trigger}</Text>
           </View>
-          <Text style={ab.thPts}>{r.pts}</Text>
+          <Text style={[ab.trPts, { color: T.bad }]}>{row.pts}</Text>
         </View>
       ))}
-      <Text style={ab.note}>
-        Sensitivity: Low ×1.4 · Medium ×1.0 · High ×0.7{'\n'}
-        2-second cooldown per event type prevents double counting.
+      <Text style={[ab.note, { color: T.textMuted }]}>
+        Sensitivity: Low ×1.4 · Medium ×1.0 · High ×0.7{'\n'}2 s cooldown per event type.
       </Text>
-      <TouchableOpacity style={ss.cancel} onPress={onClose} activeOpacity={0.6}>
-        <Text style={ss.cancelText}>Close</Text>
+      <TouchableOpacity style={[sns.cancel, { backgroundColor: T.cardAlt }]} onPress={onClose} activeOpacity={0.6}>
+        <Text style={[sns.cancelTxt, { color: T.textSub }]}>Close</Text>
       </TouchableOpacity>
     </Sheet>
   );
 }
 const ab = StyleSheet.create({
-  head: { flexDirection: 'row', alignItems: 'center', gap: Spacing.md, marginBottom: Spacing.sm },
-  icon: { width: 48, height: 48, borderRadius: 14, backgroundColor: Colors.primaryDim, justifyContent: 'center', alignItems: 'center' },
-  appName: { ...Typography.headlineMd, color: Colors.onSurface },
-  version: { ...Typography.caption, color: Colors.onSurfaceSecondary },
-  sectionLabel: { ...Typography.labelCaps, color: Colors.onSurfaceSecondary, marginBottom: 4 },
-  thRow: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', paddingVertical: 8 },
-  thBorder: { borderBottomWidth: 1, borderBottomColor: Colors.border },
-  thName: { ...Typography.bodySm, color: Colors.onSurface, fontWeight: '500' },
-  thTrigger: { ...Typography.caption, color: Colors.onSurfaceSecondary },
-  thPts: { ...Typography.metricSm, color: Colors.danger },
-  note: { ...Typography.caption, color: Colors.onSurfaceMuted, lineHeight: 18 },
+  icon:   { width: 46, height: 46, borderRadius: 13, justifyContent: 'center', alignItems: 'center' },
+  name:   { fontSize: 20, fontWeight: '800', letterSpacing: -0.5 },
+  ver:    { fontSize: 12 },
+  sec:    { fontSize: 10, fontWeight: '700', letterSpacing: 1.2, textTransform: 'uppercase' },
+  tr:     { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', paddingVertical: 8 },
+  trName: { fontSize: 13, fontWeight: '500' },
+  trTrig: { fontSize: 11, marginTop: 1 },
+  trPts:  { fontSize: 15, fontWeight: '800', paddingLeft: 8 },
+  note:   { fontSize: 12, lineHeight: 18 },
 });
 
 // ─── Screen ───────────────────────────────────────────────────────────────────
 export default function SettingsScreen() {
+  const T = useTheme();
   const [settings, setSettings] = useState(() => settingsStore.get());
   const [stats, setStats] = useState(() => driveStore.getStats());
-  const [showSensitivity, setShowSensitivity] = useState(false);
+  const [showSens, setShowSens] = useState(false);
   const [showAbout, setShowAbout] = useState(false);
 
   useEffect(() => {
@@ -176,163 +165,111 @@ export default function SettingsScreen() {
     settingsStore.set(k, v);
   }, []);
 
-  const confirmClear = () =>
-    Alert.alert(
-      'Clear all data',
-      'Permanently delete all recorded drives? This cannot be undone.',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        { text: 'Clear', style: 'destructive', onPress: () => driveStore.clearAll() },
-      ]
-    );
+  const confirmClear = () => Alert.alert('Clear all data',
+    'Permanently delete all recorded drives? This cannot be undone.',
+    [{ text: 'Cancel', style: 'cancel' },
+     { text: 'Clear', style: 'destructive', onPress: () => driveStore.clearAll() }]);
 
-  const confirmReset = () =>
-    Alert.alert(
-      'Reset settings',
-      'Restore all settings to defaults?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        { text: 'Reset', style: 'destructive', onPress: () => settingsStore.reset() },
-      ]
-    );
+  const confirmReset = () => Alert.alert('Reset settings', 'Restore all settings to defaults?',
+    [{ text: 'Cancel', style: 'cancel' },
+     { text: 'Reset', style: 'destructive', onPress: () => settingsStore.reset() }]);
 
   const openSupport = () =>
-    Linking.openURL('mailto:support@kinetiq.app?subject=Kinetiq%20Support').catch(() =>
-      Alert.alert('Support', 'support@kinetiq.app')
-    );
+    Linking.openURL('mailto:support@kinetiq.app?subject=Kinetiq%20Support')
+      .catch(() => Alert.alert('Support', 'support@kinetiq.app'));
 
-  const senLabel: Record<Sensitivity, string> = { low: 'Low', medium: 'Medium', high: 'High' };
-  const scoreColor = stats.avgScore >= 80 ? Colors.success : stats.avgScore >= 60 ? Colors.warning : Colors.danger;
+  const sensLabel: Record<Sensitivity, string> = { low: 'Low', medium: 'Medium', high: 'High' };
+  const avgC = stats.avgScore >= 80 ? T.ok : stats.avgScore >= 65 ? T.warn : T.bad;
 
   return (
-    <SafeAreaView style={s.root}>
+    <SafeAreaView style={[s.root, { backgroundColor: T.bg }]}>
       <ScrollView contentContainerStyle={s.scroll} showsVerticalScrollIndicator={false}>
-        <Text style={s.title}>Settings</Text>
+        <Text style={[s.title, { color: T.text }]}>Settings</Text>
 
-        {/* Stats card */}
-        <View style={s.statsCard}>
-          <View style={s.statsItem}>
-            <Text style={s.statsVal}>{stats.totalDrives}</Text>
-            <Text style={s.statsLabel}>Drives</Text>
-          </View>
-          <View style={s.statsSep} />
-          <View style={s.statsItem}>
-            <Text style={[s.statsVal, { color: stats.avgScore ? scoreColor : Colors.onSurface }]}>
-              {stats.avgScore || '—'}
-            </Text>
-            <Text style={s.statsLabel}>Avg score</Text>
-          </View>
-          <View style={s.statsSep} />
-          <View style={s.statsItem}>
-            <Text style={s.statsVal}>
-              {driveStore.getSessions().reduce((n, ss) => n + ss.events.length, 0)}
-            </Text>
-            <Text style={s.statsLabel}>Events</Text>
-          </View>
+        {/* Stats */}
+        <View style={[s.stats, { backgroundColor: T.card }]}>
+          {[
+            { v: `${stats.totalDrives}`, l: 'Drives' },
+            { v: stats.avgScore ? `${stats.avgScore}` : '—', l: 'Avg score', c: stats.avgScore ? avgC : T.textSub },
+            { v: `${driveStore.getSessions().reduce((n, ss) => n + ss.events.length, 0)}`, l: 'Events' },
+          ].map((item, i, arr) => (
+            <React.Fragment key={item.l}>
+              <View style={s.statsItem}>
+                <Text style={[s.statsV, { color: (item as any).c ?? T.text }]}>{item.v}</Text>
+                <Text style={[s.statsL, { color: T.textMuted }]}>{item.l}</Text>
+              </View>
+              {i < arr.length - 1 && <View style={[s.div, { backgroundColor: T.sep }]} />}
+            </React.Fragment>
+          ))}
         </View>
 
         {/* Driving */}
         <View style={s.group}>
-          <Text style={s.groupLabel}>DRIVING</Text>
-          <View style={s.card}>
-            <Row
-              icon="tune"
-              label="Detection Sensitivity"
-              onPress={() => setShowSensitivity(true)}
-              right={
-                <View style={s.valueRow}>
-                  <Text style={s.valueText}>{senLabel[settings.sensitivity]}</Text>
-                  <MaterialIcons name="chevron-right" size={15} color={Colors.onSurfaceMuted} />
-                </View>
-              }
+          <Text style={[s.groupLbl, { color: T.textMuted }]}>DRIVING</Text>
+          <View style={[s.card, { backgroundColor: T.card }]}>
+            <Row icon="tune" label="Detection Sensitivity" T={T} onPress={() => setShowSens(true)}
+              right={<View style={s.valRow}><Text style={[s.val, { color: T.textSub }]}>{sensLabel[settings.sensitivity]}</Text><MaterialIcons name="chevron-right" size={14} color={T.textMuted} /></View>}
             />
-            <Row
-              icon="notifications-active"
-              label="Real-time Alerts"
-              right={
-                <Switch
-                  value={settings.realtimeAlerts}
-                  onValueChange={(v) => set('realtimeAlerts', v)}
-                  trackColor={{ false: Colors.border, true: Colors.primary + '60' }}
-                  thumbColor={settings.realtimeAlerts ? Colors.primary : Colors.onSurfaceMuted}
-                  ios_backgroundColor={Colors.border}
-                />
-              }
+            <Row icon="notifications-active" label="Real-time Alerts" T={T}
+              right={<Switch value={settings.realtimeAlerts} onValueChange={v => set('realtimeAlerts', v)}
+                trackColor={{ false: T.sep, true: T.accent + '70' }}
+                thumbColor={settings.realtimeAlerts ? T.accent : T.textMuted}
+                ios_backgroundColor={T.sep} />}
             />
-            <Row
-              icon="vibration"
-              label="Haptic Feedback"
-              last
-              right={
-                <Switch
-                  value={settings.hapticFeedback}
-                  onValueChange={(v) => set('hapticFeedback', v)}
-                  trackColor={{ false: Colors.border, true: Colors.primary + '60' }}
-                  thumbColor={settings.hapticFeedback ? Colors.primary : Colors.onSurfaceMuted}
-                  ios_backgroundColor={Colors.border}
-                />
-              }
+            <Row icon="vibration" label="Haptic Feedback" last T={T}
+              right={<Switch value={settings.hapticFeedback} onValueChange={v => set('hapticFeedback', v)}
+                trackColor={{ false: T.sep, true: T.accent + '70' }}
+                thumbColor={settings.hapticFeedback ? T.accent : T.textMuted}
+                ios_backgroundColor={T.sep} />}
             />
           </View>
         </View>
 
         {/* Data */}
         <View style={s.group}>
-          <Text style={s.groupLabel}>DATA</Text>
-          <View style={s.card}>
-            <Row icon="delete-forever" label="Clear All Drive Data" destructive onPress={confirmClear}
-              right={<MaterialIcons name="chevron-right" size={17} color={Colors.danger} />}
+          <Text style={[s.groupLbl, { color: T.textMuted }]}>DATA</Text>
+          <View style={[s.card, { backgroundColor: T.card }]}>
+            <Row icon="delete-forever" label="Clear All Drive Data" destructive T={T} onPress={confirmClear}
+              right={<MaterialIcons name="chevron-right" size={16} color={T.bad} />}
             />
-            <Row icon="settings-backup-restore" label="Reset to Defaults" last onPress={confirmReset} />
+            <Row icon="settings-backup-restore" label="Reset to Defaults" last T={T} onPress={confirmReset} />
           </View>
         </View>
 
         {/* App */}
         <View style={s.group}>
-          <Text style={s.groupLabel}>APP</Text>
-          <View style={s.card}>
-            <Row icon="help-outline" label="Help & Support" onPress={openSupport} />
-            <Row icon="info-outline" label="About & Thresholds" last onPress={() => setShowAbout(true)} />
+          <Text style={[s.groupLbl, { color: T.textMuted }]}>APP</Text>
+          <View style={[s.card, { backgroundColor: T.card }]}>
+            <Row icon="help-outline" label="Help & Support" T={T} onPress={openSupport} />
+            <Row icon="info-outline" label="About & Thresholds" last T={T} onPress={() => setShowAbout(true)} />
           </View>
         </View>
 
-        <Text style={s.version}>Kinetiq v{Constants.expoConfig?.version ?? '1.0.0'}</Text>
+        <Text style={[s.ver, { color: T.textMuted }]}>
+          Kinetiq v{Constants.expoConfig?.version ?? '1.0.0'}
+        </Text>
       </ScrollView>
 
-      <SensitivitySheet
-        visible={showSensitivity}
-        current={settings.sensitivity}
-        onSelect={(v) => set('sensitivity', v)}
-        onClose={() => setShowSensitivity(false)}
-      />
-      <AboutSheet visible={showAbout} onClose={() => setShowAbout(false)} />
+      <SensSheet visible={showSens} current={settings.sensitivity}
+        onSelect={v => set('sensitivity', v)} onClose={() => setShowSens(false)} T={T} />
+      <AboutSheet visible={showAbout} onClose={() => setShowAbout(false)} T={T} />
     </SafeAreaView>
   );
 }
 
 const s = StyleSheet.create({
-  root: { flex: 1, backgroundColor: Colors.background },
-  scroll: { paddingHorizontal: Spacing.containerMargin, paddingBottom: 110, gap: Spacing.lg },
-  title: { ...Typography.headlineLg, color: Colors.onSurface, paddingTop: Spacing.md },
-
-  statsCard: {
-    flexDirection: 'row', alignItems: 'center',
-    backgroundColor: Colors.surfaceCard,
-    borderRadius: BorderRadius.md,
-    paddingVertical: Spacing.lg,
-    paddingHorizontal: Spacing.md,
-    borderWidth: 1, borderColor: Colors.border,
-  },
+  root:      { flex: 1 },
+  scroll:    { padding: Spacing.containerMargin, paddingBottom: 110, gap: 16 },
+  title:     { fontSize: 27, fontWeight: '800', letterSpacing: -0.8, paddingTop: 4 },
+  stats:     { borderRadius: BorderRadius.md, flexDirection: 'row', alignItems: 'center', paddingVertical: 20, paddingHorizontal: 16 },
   statsItem: { flex: 1, alignItems: 'center', gap: 3 },
-  statsVal: { ...Typography.metricMd, color: Colors.onSurface },
-  statsLabel: { ...Typography.labelSm, color: Colors.onSurfaceSecondary },
-  statsSep: { width: 1, height: 28, backgroundColor: Colors.borderStrong },
-
-  group: { gap: Spacing.xs },
-  groupLabel: { ...Typography.labelCaps, color: Colors.onSurfaceSecondary, paddingLeft: 4 },
-  card: { backgroundColor: Colors.surfaceCard, borderRadius: BorderRadius.md, borderWidth: 1, borderColor: Colors.border, overflow: 'hidden' },
-
-  valueRow: { flexDirection: 'row', alignItems: 'center', gap: 2 },
-  valueText: { ...Typography.bodySm, color: Colors.onSurfaceSecondary },
-  version: { ...Typography.caption, color: Colors.onSurfaceMuted, textAlign: 'center', marginTop: Spacing.sm },
+  statsV:    { fontSize: 22, fontWeight: '800', letterSpacing: -0.8 },
+  statsL:    { fontSize: 11, fontWeight: '500' },
+  div:       { width: 1, height: 26 },
+  group:     { gap: 6 },
+  groupLbl:  { fontSize: 10, fontWeight: '700', letterSpacing: 1.2, textTransform: 'uppercase', paddingLeft: 4 },
+  card:      { borderRadius: BorderRadius.md, overflow: 'hidden' },
+  valRow:    { flexDirection: 'row', alignItems: 'center', gap: 2 },
+  val:       { fontSize: 13, fontWeight: '500' },
+  ver:       { fontSize: 12, textAlign: 'center', marginTop: 4 },
 });
