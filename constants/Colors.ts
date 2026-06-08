@@ -48,23 +48,23 @@ export const Dark: ThemeColors = {
   cardAlt:   '#202020',
   overlay:   '#1A1A1A',
 
-  accent:     '#10B981',   // emerald-500
-  accentSoft: '#10B98115',
-  accentText: '#FFFFFF',
+  accent:     '#7DD3FC',   // sky-300 — soft pastel blue, not electric
+  accentSoft: '#7DD3FC14',
+  accentText: '#0C1A2E',   // dark navy text on pastel blue
 
-  text:       '#F0EEE9',   // warm off-white
-  textSub:    '#7A7873',   // mid warm grey
-  textMuted:  '#3D3C3A',   // very dim
+  text:       '#F0EEE9',
+  textSub:    '#7A7873',
+  textMuted:  '#3D3C3A',
 
-  sep:        '#FFFFFF0A', // 4% white — barely a breath
-  sepStrong:  '#FFFFFF14', // 8% white
+  sep:        '#FFFFFF0A',
+  sepStrong:  '#FFFFFF14',
 
-  ok:         '#34D399',   // emerald-400
+  ok:         '#34D399',
   okSoft:     '#34D39914',
-  warn:       '#F59E0B',   // amber-500 — muted, not neon
-  warnSoft:   '#F59E0B14',
-  bad:        '#F43F5E',   // rose-500
-  badSoft:    '#F43F5E14',
+  warn:       '#FCD34D',   // amber but softer
+  warnSoft:   '#FCD34D14',
+  bad:        '#F87171',   // rose but softer
+  badSoft:    '#F8717114',
 
   tabBg:      '#0C0C0C',
   tabLine:    '#FFFFFF0A',
@@ -72,29 +72,29 @@ export const Dark: ThemeColors = {
 };
 
 export const Light: ThemeColors = {
-  bg:        '#F8F7F4',   // warm white — never pure #FFF
-  bgAlt:     '#F0EFE9',
+  bg:        '#F5F7FA',
+  bgAlt:     '#ECEEF2',
   card:      '#FFFFFF',
-  cardAlt:   '#F5F4F0',
+  cardAlt:   '#F0F2F6',
   overlay:   '#FFFFFF',
 
-  accent:     '#059669',   // emerald-600 on light (darker for contrast)
-  accentSoft: '#05966912',
+  accent:     '#38BDF8',   // sky-400 — pastel blue on light
+  accentSoft: '#38BDF814',
   accentText: '#FFFFFF',
 
-  text:       '#0F0E0D',   // near-black, warm
+  text:       '#0F0E0D',
   textSub:    '#6B6762',
   textMuted:  '#A8A49E',
 
   sep:        '#0000000A',
   sepStrong:  '#00000014',
 
-  ok:         '#059669',
-  okSoft:     '#05966912',
-  warn:       '#D97706',
-  warnSoft:   '#D9770612',
-  bad:        '#E11D48',
-  badSoft:    '#E11D4812',
+  ok:         '#10B981',
+  okSoft:     '#10B98112',
+  warn:       '#F59E0B',
+  warnSoft:   '#F59E0B12',
+  bad:        '#F43F5E',
+  badSoft:    '#F43F5E12',
 
   tabBg:      '#FFFFFF',
   tabLine:    '#0000000A',
@@ -113,7 +113,7 @@ export const Colors = {
   surfaceHighlight:        Dark.cardAlt,
   primary:                 Dark.accent,
   primaryDim:              Dark.accentSoft,
-  primaryContainer:        '#0D2E22',
+  primaryContainer:        '#0D1E2E',
   onSurface:               Dark.text,
   onSurfaceSecondary:      Dark.textSub,
   onSurfaceMuted:          Dark.textMuted,

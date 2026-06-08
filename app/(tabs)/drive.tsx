@@ -15,16 +15,19 @@ import type { ThemeColors } from '../../constants/Colors';
 
 const W = Dimensions.get('window').width;
 
-// GIF original: 400 × 143  → aspect ≈ 2.797
-const GIF_ASPECT = 400 / 143;
-const GIF_W      = W;
-const GIF_H      = Math.round(GIF_W / GIF_ASPECT); // ~143 on 400-wide, scales up on bigger screens
+// GIF: 400 × 143 px — used as a mood card, not a banner
+const GIF_W = W - Spacing.containerMargin * 2;
+const GIF_H = Math.round(GIF_W / (400 / 143)); // preserves aspect ratio
 
-// ─── Tiny helpers ─────────────────────────────────────────────────────────────
-const pad  = (n: number) => n.toString().padStart(2, '0');
-const fmt  = (s: number) => `${pad(Math.floor(s / 3600))}:${pad(Math.floor((s % 3600) / 60))}:${pad(s % 60)}`;
-const clp  = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v));
-const ago  = (ms: number) => { const s = Math.floor(ms / 1000); return s < 60 ? `${s}s ago` : `${Math.floor(s / 60)}m ago`; };
+// ─── Helpers ─────────────────────────────────────────────────────────────────
+const pad = (n: number) => n.toString().padStart(2, '0');
+const fmt = (s: number) =>
+  `${pad(Math.floor(s / 3600))}:${pad(Math.floor((s % 3600) / 60))}:${pad(s % 60)}`;
+const clp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v));
+const agoStr = (ms: number) => {
+  const s = Math.floor(ms / 1000);
+  return s < 60 ? `${s}s ago` : `${Math.floor(s / 60)}m ago`;
+};
 
 function grade(s: number) {
   if (s >= 90) return 'Excellent';
@@ -32,161 +35,150 @@ function grade(s: number) {
   if (s >= 65) return 'Fair';
   return 'Poor';
 }
-function col(s: number, T: ThemeColors) {
+function scoreCol(s: number, T: ThemeColors) {
   if (s >= 80) return T.accent;
   if (s >= 65) return T.warn;
   return T.bad;
 }
 
-const EVT_COL: Record<DriveEvent['type'], (T: ThemeColors) => string> = {
-  harshBrake:         T => T.bad,
-  harshAccel:         T => T.warn,
-  sharpTurn:          T => T.warn,
-  aggressiveSteering: T => T.warn,
-  phoneHandling:      T => T.bad,
-};
+const EVT_COL = (t: DriveEvent['type'], T: ThemeColors) =>
+  t === 'phoneHandling' || t === 'harshBrake' ? T.bad : T.warn;
+
 const EVT_ICO: Record<DriveEvent['type'], React.ComponentProps<typeof MaterialIcons>['name']> = {
   harshBrake: 'warning', harshAccel: 'speed', sharpTurn: 'turn-right',
   aggressiveSteering: 'directions', phoneHandling: 'smartphone',
 };
 
-// ─── Score ring ───────────────────────────────────────────────────────────────
-const RS = W * 0.48;
-const RR = RS * 0.41;
-
-function Ring({ score, T }: { score: number; T: ThemeColors }) {
-  const circ = 2 * Math.PI * RR;
-  const off  = circ - (score / 100) * circ;
-  const c    = col(score, T);
-  const mid  = RS / 2;
+// ─── Compact score number (no ring on drive screen) ───────────────────────────
+function ScoreDisplay({ score, T }: { score: number; T: ThemeColors }) {
+  const c = scoreCol(score, T);
   return (
-    <View style={{ width: RS, height: RS, justifyContent: 'center', alignItems: 'center' }}>
-      <Svg width={RS} height={RS} style={{ transform: [{ rotate: '-90deg' }] }}>
-        <Defs>
-          <LinearGradient id="rg" x1="0" y1="0" x2="1" y2="0">
-            <Stop offset="0" stopColor={c} stopOpacity="0.35" />
-            <Stop offset="1" stopColor={c} stopOpacity="1" />
-          </LinearGradient>
-        </Defs>
-        <Circle cx={mid} cy={mid} r={RR} stroke={T.sep} strokeWidth={9} fill="none" />
-        <Circle cx={mid} cy={mid} r={RR} stroke="url(#rg)" strokeWidth={9} fill="none"
-          strokeDasharray={circ} strokeDashoffset={off} strokeLinecap="round" />
-      </Svg>
-      <View style={{ position: 'absolute', alignItems: 'center' }}>
-        <Text style={{ fontSize: 48, fontWeight: '800', color: c, letterSpacing: -3, lineHeight: 52 }}>{score}</Text>
-        <Text style={{ fontSize: 11, color: T.textMuted, fontWeight: '600', letterSpacing: 0.8, textTransform: 'uppercase' }}>{grade(score)}</Text>
+    <View style={sd.wrap}>
+      <Text style={[sd.num, { color: c }]}>{score}</Text>
+      <View style={sd.right}>
+        <Text style={[sd.grade, { color: c }]}>{grade(score)}</Text>
+        <Text style={[sd.label, { color: T.textMuted }]}>SAFETY SCORE</Text>
       </View>
     </View>
   );
 }
-
-// ─── Sensor bar ───────────────────────────────────────────────────────────────
-function SBar({ ax, v, max, T }: { ax: string; v: number; max: number; T: ThemeColors }) {
-  const pct = clp(Math.abs(v) / max, 0, 1);
-  const hot = pct > 0.72;
-  const bc  = hot ? T.warn : T.accent;
-  return (
-    <View style={sb.row}>
-      <Text style={[sb.ax, { color: T.textMuted }]}>{ax}</Text>
-      <View style={[sb.track, { backgroundColor: T.sep }]}>
-        <View style={[sb.fill, { width: `${pct * 100}%` as any, backgroundColor: bc }]} />
-      </View>
-      <Text style={[sb.val, { color: hot ? T.warn : T.textSub }]}>{v.toFixed(2)}</Text>
-    </View>
-  );
-}
-const sb = StyleSheet.create({
-  row:  { flexDirection: 'row', alignItems: 'center', gap: 9 },
-  ax:   { width: 14, fontSize: 11, fontWeight: '700' },
-  track:{ flex: 1, height: 5, borderRadius: 3, overflow: 'hidden' },
-  fill: { height: '100%', borderRadius: 3 },
-  val:  { width: 44, fontSize: 11, textAlign: 'right', fontVariant: ['tabular-nums'] },
+const sd = StyleSheet.create({
+  wrap:  { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  num:   { fontSize: 64, fontWeight: '800', letterSpacing: -4, lineHeight: 68 },
+  right: { gap: 2 },
+  grade: { fontSize: 18, fontWeight: '700', letterSpacing: -0.3 },
+  label: { fontSize: 10, fontWeight: '600', letterSpacing: 1.2, textTransform: 'uppercase' },
 });
 
+// ─── Compact dual sensor bar (magnitude only) ─────────────────────────────────
+function SensorMini({ label, value, max, T }: { label: string; value: number; max: number; T: ThemeColors }) {
+  const pct = clp(value / max, 0, 1);
+  const hot = pct > 0.72;
+  return (
+    <View style={sm.row}>
+      <Text style={[sm.label, { color: T.textMuted }]}>{label}</Text>
+      <View style={[sm.track, { backgroundColor: T.sep }]}>
+        <View style={[sm.fill, { width: `${pct * 100}%` as any, backgroundColor: hot ? T.warn : T.accent }]} />
+      </View>
+      <Text style={[sm.val, { color: hot ? T.warn : T.textSub }]}>{value.toFixed(1)}</Text>
+    </View>
+  );
+}
+const sm = StyleSheet.create({
+  row:   { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  label: { width: 44, fontSize: 11, fontWeight: '600' },
+  track: { flex: 1, height: 6, borderRadius: 3, overflow: 'hidden' },
+  fill:  { height: '100%', borderRadius: 3 },
+  val:   { width: 36, fontSize: 11, textAlign: 'right', fontVariant: ['tabular-nums'] },
+});
+
+function mag(x: number, y: number, z: number) {
+  return Math.sqrt(x * x + y * y + z * z);
+}
+
 // ─── Event row ────────────────────────────────────────────────────────────────
-function EvtRow({ e, elapsed, T, last }: { e: DriveEvent; elapsed: number; T: ThemeColors; last: boolean }) {
-  const c = EVT_COL[e.type](T);
+function EvtRow({ e, elapsed, T, last }: {
+  e: DriveEvent; elapsed: number; T: ThemeColors; last: boolean;
+}) {
+  const c = EVT_COL(e.type, T);
   return (
     <View style={[er.row, !last && { borderBottomColor: T.sep, borderBottomWidth: 1 }]}>
       <View style={[er.ico, { backgroundColor: c + '18' }]}>
-        <MaterialIcons name={EVT_ICO[e.type]} size={14} color={c} />
+        <MaterialIcons name={EVT_ICO[e.type]} size={13} color={c} />
       </View>
-      <View style={er.inf}>
-        <Text style={[er.lbl, { color: T.text }]}>{e.label}</Text>
-        <Text style={[er.tm, { color: T.textMuted }]}>{ago(elapsed - e.timestamp)}</Text>
-      </View>
+      <Text style={[er.lbl, { color: T.text }]}>{e.label}</Text>
+      <Text style={[er.time, { color: T.textMuted }]}>{agoStr(elapsed - e.timestamp)}</Text>
       <Text style={[er.pts, { color: c }]}>{e.pts}</Text>
     </View>
   );
 }
 const er = StyleSheet.create({
-  row: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 11 },
-  ico: { width: 30, height: 30, borderRadius: 8, justifyContent: 'center', alignItems: 'center' },
-  inf: { flex: 1 },
-  lbl: { fontSize: 13, fontWeight: '500' },
-  tm:  { fontSize: 11, marginTop: 1 },
-  pts: { fontSize: 15, fontWeight: '800' },
+  row:  { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 10 },
+  ico:  { width: 26, height: 26, borderRadius: 7, justifyContent: 'center', alignItems: 'center' },
+  lbl:  { flex: 1, fontSize: 13, fontWeight: '500' },
+  time: { fontSize: 11 },
+  pts:  { fontSize: 14, fontWeight: '800', minWidth: 28, textAlign: 'right' },
 });
 
 // ─── IDLE ─────────────────────────────────────────────────────────────────────
 function Idle({ onStart }: { onStart: () => void }) {
   const T = useTheme();
   return (
-    <SafeAreaView style={[g.root, { backgroundColor: T.bg }]}>
-      <View style={idle.wrap}>
-        {/* Icon */}
-        <View style={[idle.icon, { backgroundColor: T.accentSoft }]}>
-          <MaterialIcons name="speed" size={38} color={T.accent} />
+    <SafeAreaView style={[{ flex: 1, backgroundColor: T.bg }]}>
+      <View style={idl.root}>
+        {/* City night GIF sets the mood — top of the idle screen */}
+        <View style={[idl.gifCard, { backgroundColor: T.card }]}>
+          <Image
+            source={require('../../assets/city_car.gif')}
+            style={idl.gif}
+            contentFit="cover"
+            autoplay
+            cachePolicy="none"
+          />
+          {/* Subtle overlay gradient feel via text */}
+          <View style={idl.gifOverlay}>
+            <Text style={idl.gifLabel}>CITY DRIVE</Text>
+          </View>
         </View>
 
-        <View style={idle.copy}>
-          <Text style={[idle.title, { color: T.text }]}>Ready to drive?</Text>
-          <Text style={[idle.sub, { color: T.textSub }]}>
-            Sensors track acceleration, turns and phone handling in real time.
+        {/* Copy */}
+        <View style={idl.copy}>
+          <Text style={[idl.title, { color: T.text }]}>Ready to drive?</Text>
+          <Text style={[idl.sub, { color: T.textSub }]}>
+            Real-time sensor monitoring for acceleration, turns and phone handling.
           </Text>
         </View>
 
-        {/* Start button */}
-        <TouchableOpacity style={[idle.btn, { backgroundColor: T.accent }]} onPress={onStart} activeOpacity={0.85}>
+        {/* CTA */}
+        <TouchableOpacity
+          style={[idl.btn, { backgroundColor: T.accent }]}
+          onPress={onStart}
+          activeOpacity={0.85}
+        >
           <MaterialIcons name="play-arrow" size={22} color={T.accentText} />
-          <Text style={[idle.btnTxt, { color: T.accentText }]}>Start Drive</Text>
+          <Text style={[idl.btnTxt, { color: T.accentText }]}>Start Drive</Text>
         </TouchableOpacity>
 
-        {/* Scoring table */}
-        <View style={[idle.table, { backgroundColor: T.card }]}>
-          <Text style={[idle.tableHead, { color: T.textMuted }]}>SCORING EVENTS</Text>
-          {([
-            ['warning',    'Harsh brake / accel', T.bad,  '-5 pts'],
-            ['turn-right', 'Sharp turn',           T.warn, '-3 pts'],
-            ['directions', 'Aggressive steering',  T.warn, '-3 pts'],
-            ['smartphone', 'Phone handling',       T.bad,  '-10 pts'],
-          ] as const).map(([icon, label, c, pts], i, arr) => (
-            <View key={label}
-              style={[idle.tr, { borderBottomColor: T.sep, borderBottomWidth: i < arr.length - 1 ? 1 : 0 }]}
-            >
-              <MaterialIcons name={icon as any} size={15} color={c} />
-              <Text style={[idle.trLabel, { color: T.text }]}>{label}</Text>
-              <Text style={[idle.trPts, { color: c }]}>{pts}</Text>
-            </View>
-          ))}
-        </View>
+        {/* Scoring hint — one compact line */}
+        <Text style={[idl.hint, { color: T.textMuted }]}>
+          Harsh braking −5 · Sharp turns −3 · Phone handling −10
+        </Text>
       </View>
     </SafeAreaView>
   );
 }
-const idle = StyleSheet.create({
-  wrap:      { flex: 1, justifyContent: 'center', alignItems: 'center', padding: Spacing.containerMargin, gap: 20 },
-  icon:      { width: 90, height: 90, borderRadius: 45, justifyContent: 'center', alignItems: 'center' },
-  copy:      { alignItems: 'center', gap: 6 },
-  title:     { fontSize: 26, fontWeight: '800', letterSpacing: -0.8 },
-  sub:       { fontSize: 14, lineHeight: 21, textAlign: 'center', paddingHorizontal: 8 },
-  btn:       { flexDirection: 'row', alignItems: 'center', gap: 8, borderRadius: BorderRadius.lg, paddingVertical: 16, paddingHorizontal: 40 },
-  btnTxt:    { fontSize: 16, fontWeight: '700' },
-  table:     { width: '100%', borderRadius: BorderRadius.md, overflow: 'hidden', paddingHorizontal: Spacing.md, paddingTop: Spacing.sm },
-  tableHead: { fontSize: 10, fontWeight: '700', letterSpacing: 1.2, textTransform: 'uppercase', paddingVertical: 8 },
-  tr:        { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 11 },
-  trLabel:   { flex: 1, fontSize: 14 },
-  trPts:     { fontSize: 13, fontWeight: '700' },
+const idl = StyleSheet.create({
+  root:       { flex: 1, padding: Spacing.containerMargin, gap: 20, justifyContent: 'center' },
+  gifCard:    { borderRadius: BorderRadius.lg, overflow: 'hidden', position: 'relative' },
+  gif:        { width: GIF_W, height: GIF_H },
+  gifOverlay: { position: 'absolute', bottom: 10, left: 14 },
+  gifLabel:   { fontSize: 9, fontWeight: '800', letterSpacing: 2, color: 'rgba(255,255,255,0.55)', textTransform: 'uppercase' },
+  copy:       { gap: 6 },
+  title:      { fontSize: 28, fontWeight: '800', letterSpacing: -0.8 },
+  sub:        { fontSize: 14, lineHeight: 21 },
+  btn:        { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, borderRadius: BorderRadius.lg, paddingVertical: 17 },
+  btnTxt:     { fontSize: 16, fontWeight: '700' },
+  hint:       { fontSize: 12, textAlign: 'center', lineHeight: 18 },
 });
 
 // ─── ACTIVE ───────────────────────────────────────────────────────────────────
@@ -196,102 +188,121 @@ function Active({ score, durationSec, events, sensors, onEnd }: {
 }) {
   const T = useTheme();
   const elapsed = durationSec * 1000;
+  const accelMag = mag(sensors.accel.x, sensors.accel.y, sensors.accel.z);
+  const gyroMag  = mag(sensors.gyro.x,  sensors.gyro.y,  sensors.gyro.z);
 
   return (
-    <SafeAreaView style={[g.root, { backgroundColor: T.bg }]} edges={['left', 'right', 'bottom']}>
-      <ScrollView contentContainerStyle={g.scroll} showsVerticalScrollIndicator={false}>
+    <SafeAreaView style={[{ flex: 1, backgroundColor: T.bg }]}>
+      <ScrollView
+        contentContainerStyle={ac.scroll}
+        showsVerticalScrollIndicator={false}
+      >
+        {/* ── Header ──────────────────────────────────────────────────────── */}
+        <View style={ac.header}>
+          <View style={[ac.livePill, { backgroundColor: T.ok + '20' }]}>
+            <View style={[ac.liveDot, { backgroundColor: T.ok }]} />
+            <Text style={[ac.liveText, { color: T.ok }]}>LIVE</Text>
+          </View>
+          <Text style={[ac.headerTitle, { color: T.textMuted }]}>Kinetiq Drive</Text>
+        </View>
 
-        {/* ── GIF banner (full-bleed, top of scroll) ────────────────────────── */}
-        <View style={[banner.wrap, { backgroundColor: T.card }]}>
+        {/* ── Score card ───────────────────────────────────────────────────── */}
+        <View style={[ac.scoreCard, { backgroundColor: T.card }]}>
+          <ScoreDisplay score={score} T={T} />
+          <View style={[ac.scoreDivider, { backgroundColor: T.sep }]} />
+          <View style={ac.statsRow}>
+            {[
+              { v: fmt(durationSec), l: 'Duration', mono: true },
+              { v: `${100 - score}`, l: 'Pts lost',  c: T.bad },
+              { v: `${events.length}`, l: 'Events' },
+            ].map((item, i, arr) => (
+              <React.Fragment key={item.l}>
+                <View style={ac.statItem}>
+                  <Text style={[
+                    ac.statV,
+                    { color: (item as any).c ?? T.text },
+                    (item as any).mono && { fontVariant: ['tabular-nums'] },
+                  ]}>{item.v}</Text>
+                  <Text style={[ac.statL, { color: T.textMuted }]}>{item.l}</Text>
+                </View>
+                {i < arr.length - 1 && <View style={[ac.statDiv, { backgroundColor: T.sep }]} />}
+              </React.Fragment>
+            ))}
+          </View>
+        </View>
+
+        {/* ── City GIF — contextual mood card ─────────────────────────────── */}
+        <View style={[ac.gifCard, { backgroundColor: T.card }]}>
           <Image
             source={require('../../assets/city_car.gif')}
-            style={banner.gif}
+            style={ac.gif}
             contentFit="cover"
             autoplay
             cachePolicy="none"
           />
-          {/* Live pill overlaid on the gif */}
-          <View style={[banner.livePill, { backgroundColor: T.accent }]}>
-            <View style={banner.liveDot} />
-            <Text style={banner.liveText}>LIVE</Text>
-          </View>
+          <View style={ac.gifOverlay} />
         </View>
 
-        {/* ── Score ring + stats ─────────────────────────────────────────────── */}
-        <View style={[act.hero, { backgroundColor: T.card }]}>
-          <Ring score={score} T={T} />
-          <View style={act.stats}>
-            <View style={act.statItem}>
-              <Text style={[act.statV, { color: T.text, fontVariant: ['tabular-nums'] }]}>{fmt(durationSec)}</Text>
-              <Text style={[act.statL, { color: T.textMuted }]}>Duration</Text>
-            </View>
-            <View style={[act.sep, { backgroundColor: T.sep }]} />
-            <View style={act.statItem}>
-              <Text style={[act.statV, { color: T.bad }]}>{100 - score}</Text>
-              <Text style={[act.statL, { color: T.textMuted }]}>Pts lost</Text>
-            </View>
-            <View style={[act.sep, { backgroundColor: T.sep }]} />
-            <View style={act.statItem}>
-              <Text style={[act.statV, { color: T.text }]}>{events.length}</Text>
-              <Text style={[act.statL, { color: T.textMuted }]}>Events</Text>
-            </View>
-          </View>
+        {/* ── Sensors (compact — magnitude only, 2 rows) ───────────────────── */}
+        <View style={[ac.sensorCard, { backgroundColor: T.card }]}>
+          <Text style={[ac.cardLabel, { color: T.textMuted }]}>SENSORS</Text>
+          <SensorMini label="Accel" value={accelMag} max={3}  T={T} />
+          <SensorMini label="Gyro"  value={gyroMag}  max={4}  T={T} />
         </View>
 
-        {/* ── Sensor readings ───────────────────────────────────────────────── */}
-        <View style={[g.card, { backgroundColor: T.card }]}>
-          <Text style={[g.cardLbl, { color: T.textMuted }]}>ACCELEROMETER  (g)</Text>
-          <SBar ax="X" v={sensors.accel.x} max={3} T={T} />
-          <SBar ax="Y" v={sensors.accel.y} max={3} T={T} />
-          <SBar ax="Z" v={sensors.accel.z} max={3} T={T} />
-          <View style={[g.hr, { backgroundColor: T.sep }]} />
-          <Text style={[g.cardLbl, { color: T.textMuted }]}>GYROSCOPE  (rad/s)</Text>
-          <SBar ax="X" v={sensors.gyro.x} max={4} T={T} />
-          <SBar ax="Y" v={sensors.gyro.y} max={4} T={T} />
-          <SBar ax="Z" v={sensors.gyro.z} max={4} T={T} />
-        </View>
-
-        {/* ── Event feed ────────────────────────────────────────────────────── */}
+        {/* ── Events ───────────────────────────────────────────────────────── */}
         {events.length > 0 && (
-          <View style={[g.card, { backgroundColor: T.card }]}>
-            <Text style={[g.cardLbl, { color: T.textMuted }]}>EVENTS</Text>
-            {events.slice(0, 8).map((e, i) => (
+          <View style={[ac.evtCard, { backgroundColor: T.card }]}>
+            <Text style={[ac.cardLabel, { color: T.textMuted }]}>EVENTS</Text>
+            {events.slice(0, 6).map((e, i) => (
               <EvtRow key={e.id} e={e} elapsed={elapsed} T={T}
-                last={i === Math.min(7, events.length - 1)} />
+                last={i === Math.min(5, events.length - 1)} />
             ))}
           </View>
         )}
 
-        <View style={{ height: 110 }} />
-      </ScrollView>
-
-      {/* End drive button */}
-      <View style={act.endWrap}>
-        <TouchableOpacity style={[act.endBtn, { backgroundColor: T.bad }]} onPress={onEnd} activeOpacity={0.85}>
-          <MaterialIcons name="stop" size={20} color="#fff" />
-          <Text style={act.endTxt}>End Drive</Text>
+        {/* ── End Drive — inline, NOT floating ────────────────────────────── */}
+        <TouchableOpacity
+          style={[ac.endBtn, { backgroundColor: T.bad + '18', borderColor: T.bad + '40' }]}
+          onPress={onEnd}
+          activeOpacity={0.8}
+        >
+          <MaterialIcons name="stop-circle" size={20} color={T.bad} />
+          <Text style={[ac.endTxt, { color: T.bad }]}>End Drive</Text>
         </TouchableOpacity>
-      </View>
+      </ScrollView>
     </SafeAreaView>
   );
 }
-const banner = StyleSheet.create({
-  wrap:     { width: '100%', borderRadius: BorderRadius.md, overflow: 'hidden', position: 'relative' },
-  gif:      { width: GIF_W - Spacing.containerMargin * 2, height: GIF_H },
-  livePill: { position: 'absolute', top: 10, left: 12, flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 10, paddingVertical: 4, borderRadius: BorderRadius.full },
-  liveDot:  { width: 6, height: 6, borderRadius: 3, backgroundColor: '#fff' },
-  liveText: { fontSize: 10, fontWeight: '800', color: '#fff', letterSpacing: 1 },
-});
-const act = StyleSheet.create({
-  hero:     { borderRadius: BorderRadius.md, paddingVertical: Spacing.xl, alignItems: 'center', gap: Spacing.lg },
-  stats:    { flexDirection: 'row', width: '100%', paddingHorizontal: Spacing.lg },
-  statItem: { flex: 1, alignItems: 'center', gap: 3 },
-  statV:    { fontSize: 19, fontWeight: '800', letterSpacing: -0.8 },
-  statL:    { fontSize: 11, fontWeight: '500' },
-  sep:      { width: 1, height: 28, alignSelf: 'center' },
-  endWrap:  { position: 'absolute', bottom: 90, left: Spacing.containerMargin, right: Spacing.containerMargin },
-  endBtn:   { borderRadius: BorderRadius.lg, paddingVertical: 17, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: Spacing.sm },
-  endTxt:   { fontSize: 16, fontWeight: '700', color: '#fff' },
+
+const ac = StyleSheet.create({
+  scroll:     { padding: Spacing.containerMargin, gap: 12, paddingBottom: 40 },
+
+  header:     { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 4 },
+  livePill:   { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 10, paddingVertical: 4, borderRadius: BorderRadius.full },
+  liveDot:    { width: 6, height: 6, borderRadius: 3 },
+  liveText:   { fontSize: 10, fontWeight: '800', letterSpacing: 1 },
+  headerTitle:{ fontSize: 13, fontWeight: '600' },
+
+  scoreCard:  { borderRadius: BorderRadius.lg, padding: Spacing.md, gap: 14 },
+  scoreDivider:{ height: 1 },
+  statsRow:   { flexDirection: 'row', alignItems: 'center' },
+  statItem:   { flex: 1, alignItems: 'center', gap: 2 },
+  statV:      { fontSize: 17, fontWeight: '800', letterSpacing: -0.5 },
+  statL:      { fontSize: 10, fontWeight: '500' },
+  statDiv:    { width: 1, height: 22 },
+
+  gifCard:    { borderRadius: BorderRadius.lg, overflow: 'hidden' },
+  gif:        { width: GIF_W, height: GIF_H },
+  gifOverlay: { position: 'absolute', inset: 0, backgroundColor: '#00000018' } as any,
+
+  sensorCard: { borderRadius: BorderRadius.md, padding: Spacing.md, gap: 10 },
+  cardLabel:  { fontSize: 10, fontWeight: '700', letterSpacing: 1.2, textTransform: 'uppercase', marginBottom: 2 },
+
+  evtCard:    { borderRadius: BorderRadius.md, padding: Spacing.md, gap: 0 },
+
+  endBtn:     { borderRadius: BorderRadius.lg, paddingVertical: 16, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, borderWidth: 1, marginTop: 4 },
+  endTxt:     { fontSize: 15, fontWeight: '700' },
 });
 
 // ─── SUMMARY ──────────────────────────────────────────────────────────────────
@@ -300,71 +311,97 @@ function Summary({ session, onDone }: {
   onDone: () => void;
 }) {
   const T = useTheme();
-  const c = col(session.score, T);
+  const c = scoreCol(session.score, T);
   const counts = session.events.reduce((acc, e) => {
     acc[e.label] = (acc[e.label] ?? 0) + 1; return acc;
   }, {} as Record<string, number>);
 
+  // Build compact ring for summary only
+  const RS = W * 0.44, RR = RS * 0.42;
+  const circ = 2 * Math.PI * RR, off = circ - (session.score / 100) * circ;
+  const mid = RS / 2;
+
   return (
-    <SafeAreaView style={[g.root, { backgroundColor: T.bg }]}>
-      <ScrollView contentContainerStyle={[g.scroll, { alignItems: 'center' }]} showsVerticalScrollIndicator={false}>
+    <SafeAreaView style={[{ flex: 1, backgroundColor: T.bg }]}>
+      <ScrollView
+        contentContainerStyle={{ padding: Spacing.containerMargin, gap: 14, paddingBottom: 60, alignItems: 'center' }}
+        showsVerticalScrollIndicator={false}
+      >
+        <Text style={[su.heading, { color: T.text }]}>Drive complete</Text>
 
-        <Text style={[sum.hdg, { color: T.text }]}>Drive complete</Text>
-
-        <View style={[sum.ringCard, { backgroundColor: T.card }]}>
-          <Ring score={session.score} T={T} />
-          <Text style={[sum.rating, { color: c }]}>{session.rating}</Text>
+        {/* Ring — only on summary, makes sense here as a result visualization */}
+        <View style={[su.ringCard, { backgroundColor: T.card }]}>
+          <View style={{ width: RS, height: RS, justifyContent: 'center', alignItems: 'center' }}>
+            <Svg width={RS} height={RS} style={{ transform: [{ rotate: '-90deg' }] }}>
+              <Defs>
+                <LinearGradient id="sg" x1="0" y1="0" x2="1" y2="0">
+                  <Stop offset="0" stopColor={c} stopOpacity="0.3" />
+                  <Stop offset="1" stopColor={c} stopOpacity="1" />
+                </LinearGradient>
+              </Defs>
+              <Circle cx={mid} cy={mid} r={RR} stroke={T.sep} strokeWidth={8} fill="none" />
+              <Circle cx={mid} cy={mid} r={RR} stroke="url(#sg)" strokeWidth={8} fill="none"
+                strokeDasharray={circ} strokeDashoffset={off} strokeLinecap="round" />
+            </Svg>
+            <View style={{ position: 'absolute', alignItems: 'center' }}>
+              <Text style={{ fontSize: 42, fontWeight: '800', color: c, letterSpacing: -2.5 }}>{session.score}</Text>
+              <Text style={{ fontSize: 11, color: T.textMuted, fontWeight: '600', letterSpacing: 0.8, textTransform: 'uppercase' }}>{session.rating}</Text>
+            </View>
+          </View>
         </View>
 
-        <View style={[sum.statsRow, { backgroundColor: T.card }]}>
+        {/* Stats */}
+        <View style={[su.statsRow, { backgroundColor: T.card }]}>
           {[
             { v: fmt(session.durationSec), l: 'Duration' },
             { v: `${session.events.length}`, l: 'Events' },
             { v: `${100 - session.score}`, l: 'Pts lost', c: T.bad },
           ].map((item, i, arr) => (
             <React.Fragment key={item.l}>
-              <View style={sum.stat}>
-                <Text style={[sum.statV, { color: (item as any).c ?? T.text }]}>{item.v}</Text>
-                <Text style={[sum.statL, { color: T.textMuted }]}>{item.l}</Text>
+              <View style={su.stat}>
+                <Text style={[su.statV, { color: (item as any).c ?? T.text }]}>{item.v}</Text>
+                <Text style={[su.statL, { color: T.textMuted }]}>{item.l}</Text>
               </View>
-              {i < arr.length - 1 && <View style={[sum.div, { backgroundColor: T.sep }]} />}
+              {i < arr.length - 1 && <View style={[su.div, { backgroundColor: T.sep }]} />}
             </React.Fragment>
           ))}
         </View>
 
+        {/* Breakdown */}
         {Object.keys(counts).length > 0 && (
-          <View style={[g.card, { backgroundColor: T.card, width: '100%' }]}>
-            <Text style={[g.cardLbl, { color: T.textMuted }]}>EVENT BREAKDOWN</Text>
+          <View style={[su.card, { backgroundColor: T.card, width: '100%' }]}>
+            <Text style={[su.cardLbl, { color: T.textMuted }]}>EVENT BREAKDOWN</Text>
             {Object.entries(counts).map(([label, count], i, arr) => (
               <View key={label}
-                style={[sum.bRow, i < arr.length - 1 && { borderBottomColor: T.sep, borderBottomWidth: 1 }]}>
-                <Text style={[sum.bLbl, { color: T.text }]}>{label}</Text>
-                <Text style={[sum.bCnt, { color: T.accent }]}>×{count}</Text>
+                style={[su.bRow, i < arr.length - 1 && { borderBottomColor: T.sep, borderBottomWidth: 1 }]}>
+                <Text style={[su.bLbl, { color: T.text }]}>{label}</Text>
+                <Text style={[su.bCnt, { color: T.accent }]}>×{count}</Text>
               </View>
             ))}
           </View>
         )}
 
-        <TouchableOpacity style={[sum.done, { backgroundColor: T.accent }]} onPress={onDone} activeOpacity={0.85}>
-          <Text style={[sum.doneTxt, { color: T.accentText }]}>Done</Text>
+        <TouchableOpacity style={[su.done, { backgroundColor: T.accent }]} onPress={onDone} activeOpacity={0.85}>
+          <Text style={[su.doneTxt, { color: T.accentText }]}>Done</Text>
         </TouchableOpacity>
       </ScrollView>
     </SafeAreaView>
   );
 }
-const sum = StyleSheet.create({
-  hdg:      { fontSize: 26, fontWeight: '800', letterSpacing: -0.8, marginBottom: Spacing.sm },
-  ringCard: { borderRadius: BorderRadius.xl, paddingVertical: Spacing.xl, alignItems: 'center', gap: Spacing.sm, width: '100%', marginBottom: Spacing.md },
-  rating:   { fontSize: 18, fontWeight: '700' },
-  statsRow: { flexDirection: 'row', width: '100%', borderRadius: BorderRadius.md, paddingVertical: Spacing.lg, paddingHorizontal: Spacing.md, marginBottom: Spacing.md },
+const su = StyleSheet.create({
+  heading:  { fontSize: 26, fontWeight: '800', letterSpacing: -0.8 },
+  ringCard: { borderRadius: BorderRadius.xl, paddingVertical: Spacing.xl, alignItems: 'center', width: '100%' },
+  statsRow: { flexDirection: 'row', width: '100%', borderRadius: BorderRadius.md, paddingVertical: 20, paddingHorizontal: 16 },
   stat:     { flex: 1, alignItems: 'center', gap: 3 },
   statV:    { fontSize: 18, fontWeight: '800', letterSpacing: -0.5 },
   statL:    { fontSize: 11, fontWeight: '500' },
-  div:      { width: 1, height: 28, alignSelf: 'center' },
-  bRow:     { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 11 },
+  div:      { width: 1, height: 26, alignSelf: 'center' },
+  card:     { borderRadius: BorderRadius.md, padding: Spacing.md, gap: 0 },
+  cardLbl:  { fontSize: 10, fontWeight: '700', letterSpacing: 1.2, textTransform: 'uppercase', marginBottom: 8 },
+  bRow:     { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 10 },
   bLbl:     { fontSize: 14 },
   bCnt:     { fontSize: 15, fontWeight: '800' },
-  done:     { width: '100%', borderRadius: BorderRadius.lg, paddingVertical: 17, alignItems: 'center', marginTop: Spacing.md },
+  done:     { width: '100%', borderRadius: BorderRadius.lg, paddingVertical: 17, alignItems: 'center' },
   doneTxt:  { fontSize: 16, fontWeight: '700' },
 });
 
@@ -373,14 +410,13 @@ export default function DriveScreen() {
   const { state, startDrive, endDrive, resetToIdle } = useDriveSession();
   if (state.status === 'idle')     return <Idle onStart={startDrive} />;
   if (state.status === 'finished') return <Summary session={state.session} onDone={resetToIdle} />;
-  return <Active score={state.score} durationSec={state.durationSec}
-    events={state.events} sensors={state.sensors} onEnd={endDrive} />;
+  return (
+    <Active
+      score={state.score}
+      durationSec={state.durationSec}
+      events={state.events}
+      sensors={state.sensors}
+      onEnd={endDrive}
+    />
+  );
 }
-
-const g = StyleSheet.create({
-  root:    { flex: 1 },
-  scroll:  { padding: Spacing.containerMargin, gap: Spacing.md },
-  card:    { borderRadius: BorderRadius.md, padding: Spacing.md, gap: Spacing.sm },
-  cardLbl: { fontSize: 10, fontWeight: '700', letterSpacing: 1.2, textTransform: 'uppercase', marginBottom: 4 },
-  hr:      { height: 1, marginVertical: 4 },
-});
