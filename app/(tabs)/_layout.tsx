@@ -1,5 +1,6 @@
 import { Tabs } from 'expo-router';
 import { MaterialIcons } from '@expo/vector-icons';
+import { Platform } from 'react-native';
 import { Colors } from '../../constants/Colors';
 
 export default function TabLayout() {
@@ -8,20 +9,21 @@ export default function TabLayout() {
       screenOptions={{
         headerShown: false,
         tabBarStyle: {
-          backgroundColor: Colors.surfaceContainerLowest,
-          borderTopColor: Colors.outlineVariant + '20',
+          backgroundColor: Colors.surfaceCard,
+          borderTopColor: Colors.border,
           borderTopWidth: 1,
-          height: 64,
-          paddingBottom: 8,
-          paddingTop: 8,
+          height: Platform.OS === 'ios' ? 82 : 64,
+          paddingBottom: Platform.OS === 'ios' ? 24 : 10,
+          paddingTop: 10,
           elevation: 0,
         },
         tabBarActiveTintColor: Colors.primary,
-        tabBarInactiveTintColor: Colors.onSurfaceVariant,
+        tabBarInactiveTintColor: Colors.onSurfaceMuted,
         tabBarLabelStyle: {
           fontSize: 10,
           fontWeight: '600',
-          letterSpacing: 0.3,
+          letterSpacing: 0.2,
+          marginTop: -2,
         },
       }}
     >
@@ -30,7 +32,7 @@ export default function TabLayout() {
         options={{
           title: 'Home',
           tabBarIcon: ({ color, size }) => (
-            <MaterialIcons name="home" size={size} color={color} />
+            <MaterialIcons name="home" size={22} color={color} />
           ),
         }}
       />
@@ -39,7 +41,7 @@ export default function TabLayout() {
         options={{
           title: 'Drive',
           tabBarIcon: ({ color, size }) => (
-            <MaterialIcons name="directions-car" size={size} color={color} />
+            <MaterialIcons name="speed" size={22} color={color} />
           ),
         }}
       />
@@ -48,7 +50,7 @@ export default function TabLayout() {
         options={{
           title: 'History',
           tabBarIcon: ({ color, size }) => (
-            <MaterialIcons name="history" size={size} color={color} />
+            <MaterialIcons name="history" size={22} color={color} />
           ),
         }}
       />
@@ -57,7 +59,7 @@ export default function TabLayout() {
         options={{
           title: 'Insights',
           tabBarIcon: ({ color, size }) => (
-            <MaterialIcons name="insights" size={size} color={color} />
+            <MaterialIcons name="bar-chart" size={22} color={color} />
           ),
         }}
       />
@@ -66,7 +68,7 @@ export default function TabLayout() {
         options={{
           title: 'Settings',
           tabBarIcon: ({ color, size }) => (
-            <MaterialIcons name="settings" size={size} color={color} />
+            <MaterialIcons name="tune" size={22} color={color} />
           ),
         }}
       />

@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, ScrollView, StyleSheet } from 'react-native';
+import { View, Text, ScrollView, StyleSheet, Dimensions } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { MaterialIcons } from '@expo/vector-icons';
 import Svg, { Circle } from 'react-native-svg';
@@ -8,160 +8,216 @@ import { Typography } from '../../constants/Typography';
 import { Spacing, BorderRadius } from '../../constants/Spacing';
 import { driveStore, DriveSession, DriveEvent } from '../../store/driveStore';
 
-const EVENT_LABELS: Record<DriveEvent['type'], string> = {
-  harshBrake: 'Harsh Brake',
-  harshAccel: 'Harsh Accel',
-  sharpTurn: 'Sharp Turn',
-  aggressiveSteering: 'Aggressive Steer',
-  phoneHandling: 'Phone Handling',
-};
+const { width: W } = Dimensions.get('window');
+const CHART_H = 110;
 
-const EVENT_COLORS: Record<DriveEvent['type'], string> = {
-  harshBrake: Colors.danger,
-  harshAccel: Colors.warning,
-  sharpTurn: Colors.warning,
-  aggressiveSteering: Colors.warning,
-  phoneHandling: Colors.error,
-};
-
-function getScoreColor(s: number) {
-  return s >= 80 ? Colors.success : s >= 60 ? Colors.warning : Colors.danger;
+// ─── Helpers ─────────────────────────────────────────────────────────────────
+function scoreColor(s: number) {
+  if (s >= 85) return Colors.primary;
+  if (s >= 65) return Colors.warning;
+  return Colors.danger;
 }
+
+const EVT_META: Record<DriveEvent['type'], { label: string; color: string }> = {
+  harshBrake:         { label: 'Harsh Brake',        color: Colors.danger  },
+  harshAccel:         { label: 'Harsh Accel',         color: Colors.warning },
+  sharpTurn:          { label: 'Sharp Turn',          color: Colors.warning },
+  aggressiveSteering: { label: 'Aggressive Steer',    color: Colors.warning },
+  phoneHandling:      { label: 'Phone Handling',      color: Colors.error   },
+};
 
 function buildBreakdown(sessions: DriveSession[]) {
   const counts: Partial<Record<DriveEvent['type'], number>> = {};
   sessions.forEach((s) => s.events.forEach((e) => {
     counts[e.type] = (counts[e.type] ?? 0) + 1;
   }));
-  const total = Object.values(counts).reduce((a, b) => a + b, 0) || 1;
-  return (Object.keys(counts) as DriveEvent['type'][]).map((type) => ({
-    type,
-    label: EVENT_LABELS[type],
-    color: EVENT_COLORS[type],
-    count: counts[type]!,
-    pct: Math.round((counts[type]! / total) * 100),
-  })).sort((a, b) => b.count - a.count);
+  const total = Math.max(1, Object.values(counts).reduce((a, b) => a + b, 0));
+  return (Object.keys(counts) as DriveEvent['type'][])
+    .map((type) => ({
+      type,
+      ...EVT_META[type],
+      count: counts[type]!,
+      pct: Math.round((counts[type]! / total) * 100),
+    }))
+    .sort((a, b) => b.count - a.count);
 }
 
-function getWeeklyScores(sessions: DriveSession[]): { day: string; score: number | null }[] {
-  const days: { day: string; score: number | null }[] = [];
-  for (let i = 6; i >= 0; i--) {
+function getLast7(sessions: DriveSession[]) {
+  return Array.from({ length: 7 }, (_, i) => {
     const d = new Date();
-    d.setDate(d.getDate() - i);
-    const label = d.toLocaleDateString(undefined, { weekday: 'short' }).slice(0, 1);
-    const dayStr = d.toDateString();
-    const daySessions = sessions.filter((s) => new Date(s.startedAt).toDateString() === dayStr);
-    if (daySessions.length === 0) {
-      days.push({ day: label, score: null });
-    } else {
-      const avg = Math.round(daySessions.reduce((sum, s) => sum + s.score, 0) / daySessions.length);
-      days.push({ day: label, score: avg });
-    }
-  }
-  return days;
+    d.setDate(d.getDate() - (6 - i));
+    const key = d.toDateString();
+    const day = d.toLocaleDateString(undefined, { weekday: 'short' }).slice(0, 1);
+    const hits = sessions.filter((s) => new Date(s.startedAt).toDateString() === key);
+    const score = hits.length
+      ? Math.round(hits.reduce((sum, s) => sum + s.score, 0) / hits.length)
+      : null;
+    return { day, score };
+  });
 }
 
+// ─── Bar chart ────────────────────────────────────────────────────────────────
+function WeekChart({ data }: { data: { day: string; score: number | null }[] }) {
+  const max = Math.max(...data.map((d) => d.score ?? 0), 1);
+  return (
+    <View style={chart.wrap}>
+      {data.map((d, i) => {
+        const hasScore = d.score !== null;
+        const h = hasScore ? Math.max(6, (d.score! / 100) * CHART_H) : 0;
+        const color = hasScore ? scoreColor(d.score!) : Colors.border;
+        const isLast = i === data.length - 1;
+        return (
+          <View key={i} style={chart.col}>
+            <View style={chart.track}>
+              {hasScore && (
+                <View style={[chart.bar, { height: h, backgroundColor: color }]}>
+                  {isLast && (
+                    <View style={chart.barGlow} />
+                  )}
+                </View>
+              )}
+            </View>
+            {hasScore && (
+              <Text style={[chart.score, { color }]}>{d.score}</Text>
+            )}
+            <Text style={[chart.day, isLast && { color: Colors.primary }]}>{d.day}</Text>
+          </View>
+        );
+      })}
+    </View>
+  );
+}
+const chart = StyleSheet.create({
+  wrap: { flexDirection: 'row', alignItems: 'flex-end', gap: 6, paddingTop: 8 },
+  col: { flex: 1, alignItems: 'center', gap: 4 },
+  track: { width: '100%', height: CHART_H, justifyContent: 'flex-end' },
+  bar: { width: '100%', borderTopLeftRadius: 4, borderTopRightRadius: 4, overflow: 'hidden' },
+  barGlow: { ...StyleSheet.absoluteFill, backgroundColor: '#ffffff10' },
+  score: { fontSize: 9, fontWeight: '700' },
+  day: { ...Typography.caption, color: Colors.onSurfaceMuted, fontWeight: '600' },
+});
+
+// ─── Breakdown row ────────────────────────────────────────────────────────────
+function BRow({ item }: { item: ReturnType<typeof buildBreakdown>[0] }) {
+  return (
+    <View style={br.wrap}>
+      <View style={[br.dot, { backgroundColor: item.color }]} />
+      <Text style={br.label}>{item.label}</Text>
+      <View style={br.barWrap}>
+        <View style={[br.bar, { width: `${item.pct}%` as any, backgroundColor: item.color + '50' }]} />
+      </View>
+      <Text style={[br.pct, { color: item.color }]}>{item.pct}%</Text>
+      <Text style={br.count}>×{item.count}</Text>
+    </View>
+  );
+}
+const br = StyleSheet.create({
+  wrap: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 8 },
+  dot: { width: 7, height: 7, borderRadius: 4 },
+  label: { width: 108, ...Typography.bodySm, color: Colors.onSurface },
+  barWrap: { flex: 1, height: 5, backgroundColor: Colors.border, borderRadius: 3, overflow: 'hidden' },
+  bar: { height: '100%', borderRadius: 3 },
+  pct: { width: 32, ...Typography.labelSm, textAlign: 'right', fontWeight: '700' },
+  count: { width: 24, ...Typography.caption, color: Colors.onSurfaceSecondary, textAlign: 'right' },
+});
+
+// ─── Screen ───────────────────────────────────────────────────────────────────
 export default function InsightsScreen() {
   const [sessions, setSessions] = useState<DriveSession[]>(() => driveStore.getSessions());
-
-  useEffect(() => {
-    const unsub = driveStore.subscribe(() => setSessions(driveStore.getSessions()));
-    return unsub;
-  }, []);
+  useEffect(() => driveStore.subscribe(() => setSessions(driveStore.getSessions())), []);
 
   const stats = driveStore.getStats();
   const breakdown = buildBreakdown(sessions);
-  const weekly = getWeeklyScores(sessions);
+  const weekly = getLast7(sessions);
   const validWeekly = weekly.filter((d) => d.score !== null);
-  const bestDay = validWeekly.length ? validWeekly.reduce((a, b) => (a.score! > b.score! ? a : b)) : null;
-  const worstDay = validWeekly.length ? validWeekly.reduce((a, b) => (a.score! < b.score! ? a : b)) : null;
-  const maxBarScore = Math.max(...validWeekly.map((d) => d.score!), 1);
+  const best = validWeekly.length ? validWeekly.reduce((a, b) => (a.score! > b.score! ? a : b)) : null;
+  const worst = validWeekly.length ? validWeekly.reduce((a, b) => (a.score! < b.score! ? a : b)) : null;
 
   const avg = stats.avgScore || 0;
-  const r = 44;
-  const circ = 2 * Math.PI * r;
+  const avgColor = scoreColor(avg || 100);
+  const r = 48, circ = 2 * Math.PI * r;
   const offset = circ - (avg / 100) * circ;
-  const avgColor = getScoreColor(avg);
 
+  // Tips
   const tips: string[] = [];
-  if (breakdown.find((b) => b.type === 'harshBrake' && b.pct > 20)) tips.push('Increase following distance to avoid sudden braking.');
-  if (breakdown.find((b) => b.type === 'sharpTurn' && b.pct > 15)) tips.push('Slow down before turns and corners.');
-  if (breakdown.find((b) => b.type === 'phoneHandling' && b.count > 0)) tips.push('Put the phone away before driving — even a glance costs 10 pts.');
-  if (tips.length === 0 && sessions.length > 0) tips.push('Great driving! Keep it up and maintain your score.');
-  if (sessions.length === 0) tips.push('Complete your first drive to get personalized tips.');
+  if (breakdown.find((b) => b.type === 'phoneHandling' && b.count > 0))
+    tips.push('Put your phone away — phone handling costs 10 pts each time.');
+  if (breakdown.find((b) => b.type === 'harshBrake' && b.pct > 20))
+    tips.push('Increase following distance to reduce sudden braking.');
+  if (breakdown.find((b) => b.type === 'sharpTurn' && b.pct > 15))
+    tips.push('Ease off before corners to avoid sharp turn flags.');
+  if (!tips.length && sessions.length > 0) tips.push('Great driving! Keep your current habits.');
+  if (!sessions.length) tips.push('Complete your first drive to get personalised tips here.');
 
   return (
-    <SafeAreaView style={styles.container}>
-      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-        <Text style={styles.title}>Insights</Text>
+    <SafeAreaView style={s.root}>
+      <ScrollView contentContainerStyle={s.scroll} showsVerticalScrollIndicator={false}>
+        <Text style={s.title}>Insights</Text>
 
-        {/* Average ring */}
-        <View style={styles.card}>
-          <View style={styles.avgRow}>
-            <View style={styles.ringWrap}>
-              <Svg width={100} height={100} style={{ transform: [{ rotate: '-90deg' }] }}>
-                <Circle cx={50} cy={50} r={r} stroke={Colors.outlineVariant + '30'} strokeWidth={7} fill="transparent" />
-                <Circle cx={50} cy={50} r={r} stroke={avgColor} strokeWidth={7} fill="transparent"
+        {/* Average ring card */}
+        <View style={s.card}>
+          <View style={s.avgRow}>
+            {/* Ring */}
+            <View style={s.ringWrap}>
+              <Svg width={112} height={112} style={{ transform: [{ rotate: '-90deg' }] }}>
+                <Circle cx={56} cy={56} r={r} stroke={Colors.border} strokeWidth={9} fill="none" />
+                <Circle cx={56} cy={56} r={r} stroke={avgColor} strokeWidth={9} fill="none"
                   strokeDasharray={circ} strokeDashoffset={offset} strokeLinecap="round" />
               </Svg>
-              <View style={styles.ringCenter}>
-                <Text style={[styles.avgNum, { color: avgColor }]}>{avg || '—'}</Text>
+              <View style={s.ringCenter}>
+                <Text style={[s.avgNum, { color: avgColor }]}>{avg || '—'}</Text>
               </View>
             </View>
-            <View style={styles.avgInfo}>
-              <Text style={styles.cardTitle}>ALL-TIME AVERAGE</Text>
-              <View style={styles.avgStat}><Text style={styles.avgStatLabel}>Total drives</Text><Text style={styles.avgStatVal}>{sessions.length}</Text></View>
-              {bestDay && <View style={styles.avgStat}><Text style={styles.avgStatLabel}>Best day</Text><Text style={[styles.avgStatVal, { color: Colors.success }]}>{bestDay.score} ({bestDay.day})</Text></View>}
-              {worstDay && worstDay !== bestDay && <View style={styles.avgStat}><Text style={styles.avgStatLabel}>Worst day</Text><Text style={[styles.avgStatVal, { color: Colors.warning }]}>{worstDay.score} ({worstDay.day})</Text></View>}
+            {/* Stats */}
+            <View style={s.avgStats}>
+              <Text style={s.cardLabel}>OVERVIEW</Text>
+              <View style={s.statRow}>
+                <Text style={s.statLabel}>Total drives</Text>
+                <Text style={s.statVal}>{sessions.length}</Text>
+              </View>
+              {best && (
+                <View style={s.statRow}>
+                  <Text style={s.statLabel}>Best</Text>
+                  <Text style={[s.statVal, { color: Colors.success }]}>{best.score} ({best.day})</Text>
+                </View>
+              )}
+              {worst && worst.score !== best?.score && (
+                <View style={s.statRow}>
+                  <Text style={s.statLabel}>Worst</Text>
+                  <Text style={[s.statVal, { color: Colors.warning }]}>{worst.score} ({worst.day})</Text>
+                </View>
+              )}
             </View>
           </View>
         </View>
 
-        {/* Weekly bar chart */}
-        <View style={styles.card}>
-          <Text style={styles.cardTitle}>LAST 7 DAYS</Text>
-          <View style={styles.chart}>
-            {weekly.map((d, i) => {
-              const hasScore = d.score !== null;
-              const fillPct = hasScore ? (d.score! / 100) * 100 : 0;
-              const barColor = hasScore ? getScoreColor(d.score!) : Colors.outlineVariant + '30';
-              return (
-                <View key={i} style={styles.barCol}>
-                  <View style={styles.barTrack}>
-                    {hasScore && (
-                      <View style={[styles.barFill, { height: `${fillPct}%` as any, backgroundColor: barColor }]} />
-                    )}
-                  </View>
-                  <Text style={styles.barDay}>{d.day}</Text>
-                </View>
-              );
-            })}
-          </View>
+        {/* Weekly chart */}
+        <View style={s.card}>
+          <Text style={s.cardLabel}>LAST 7 DAYS</Text>
+          <WeekChart data={weekly} />
         </View>
 
-        {/* Event breakdown */}
+        {/* Breakdown */}
         {breakdown.length > 0 && (
-          <View style={styles.card}>
-            <Text style={styles.cardTitle}>EVENT BREAKDOWN</Text>
-            {breakdown.map((b) => (
-              <View key={b.type} style={styles.breakdownRow}>
-                <View style={styles.breakdownLeft}>
-                  <View style={[styles.dot, { backgroundColor: b.color }]} />
-                  <Text style={styles.breakdownLabel}>{b.label}</Text>
-                </View>
-                <Text style={styles.breakdownCount}>×{b.count}</Text>
-                <Text style={[styles.breakdownPct, { color: b.color }]}>{b.pct}%</Text>
+          <View style={s.card}>
+            <Text style={s.cardLabel}>EVENT BREAKDOWN</Text>
+            {breakdown.map((b, i) => (
+              <View key={b.type}>
+                {i > 0 && <View style={s.sep} />}
+                <BRow item={b} />
               </View>
             ))}
           </View>
         )}
 
         {/* Tip */}
-        <View style={styles.tipCard}>
-          <MaterialIcons name="lightbulb-outline" size={20} color={Colors.primary} />
-          <View style={styles.tipContent}>
-            <Text style={styles.tipTitle}>Tip</Text>
-            <Text style={styles.tipText}>{tips[0]}</Text>
+        <View style={s.tipCard}>
+          <View style={s.tipIcon}>
+            <MaterialIcons name="lightbulb" size={18} color={Colors.primary} />
+          </View>
+          <View style={s.tipBody}>
+            <Text style={s.tipTitle}>Tip</Text>
+            <Text style={s.tipText}>{tips[0]}</Text>
           </View>
         </View>
       </ScrollView>
@@ -169,33 +225,27 @@ export default function InsightsScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: Colors.background },
-  content: { padding: Spacing.containerMargin, paddingBottom: 100, gap: Spacing.md },
-  title: { ...Typography.headlineLg, color: Colors.onSurface, paddingTop: Spacing.sm },
-  card: { backgroundColor: Colors.surfaceCard, borderRadius: BorderRadius.lg, padding: Spacing.lg, gap: Spacing.md, borderWidth: 1, borderColor: Colors.outlineVariant + '20' },
-  cardTitle: { ...Typography.labelCaps, color: Colors.onSurfaceVariant },
+const s = StyleSheet.create({
+  root: { flex: 1, backgroundColor: Colors.background },
+  scroll: { paddingHorizontal: Spacing.containerMargin, paddingBottom: 110, gap: Spacing.md },
+  title: { ...Typography.headlineLg, color: Colors.onSurface, paddingTop: Spacing.md },
+
+  card: { backgroundColor: Colors.surfaceCard, borderRadius: BorderRadius.md, padding: Spacing.md, gap: Spacing.sm, borderWidth: 1, borderColor: Colors.border },
+  cardLabel: { ...Typography.labelCaps, color: Colors.onSurfaceSecondary, marginBottom: 2 },
+  sep: { height: 1, backgroundColor: Colors.border },
+
   avgRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.lg },
-  ringWrap: { width: 100, height: 100, justifyContent: 'center', alignItems: 'center' },
+  ringWrap: { width: 112, height: 112, justifyContent: 'center', alignItems: 'center' },
   ringCenter: { position: 'absolute', alignItems: 'center' },
-  avgNum: { fontSize: 26, fontWeight: '700', letterSpacing: -1 },
-  avgInfo: { flex: 1, gap: Spacing.sm },
-  avgStat: { flexDirection: 'row', justifyContent: 'space-between' },
-  avgStatLabel: { ...Typography.caption, color: Colors.onSurfaceVariant },
-  avgStatVal: { ...Typography.bodySm, color: Colors.onSurface, fontWeight: '600' },
-  chart: { flexDirection: 'row', justifyContent: 'space-between', height: 90, gap: 4 },
-  barCol: { flex: 1, alignItems: 'center', gap: 5 },
-  barTrack: { flex: 1, width: '100%', backgroundColor: Colors.outlineVariant + '15', borderRadius: 4, justifyContent: 'flex-end', overflow: 'hidden' },
-  barFill: { width: '100%', borderRadius: 4 },
-  barDay: { fontSize: 10, fontWeight: '600', color: Colors.onSurfaceVariant },
-  breakdownRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm },
-  breakdownLeft: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm, flex: 1 },
-  dot: { width: 7, height: 7, borderRadius: 4 },
-  breakdownLabel: { ...Typography.bodyMd, color: Colors.onSurface },
-  breakdownCount: { ...Typography.bodySm, color: Colors.onSurfaceVariant, width: 30, textAlign: 'right' },
-  breakdownPct: { ...Typography.bodySm, fontWeight: '700', width: 36, textAlign: 'right' },
-  tipCard: { backgroundColor: Colors.primaryContainer + '40', borderRadius: BorderRadius.lg, padding: Spacing.md, flexDirection: 'row', gap: Spacing.md, alignItems: 'flex-start', borderWidth: 1, borderColor: Colors.primary + '20' },
-  tipContent: { flex: 1, gap: 4 },
-  tipTitle: { ...Typography.bodySm, color: Colors.primary, fontWeight: '600' },
-  tipText: { ...Typography.bodySm, color: Colors.onSurfaceVariant, lineHeight: 20 },
+  avgNum: { fontSize: 28, fontWeight: '800', letterSpacing: -1.5 },
+  avgStats: { flex: 1, gap: 8 },
+  statRow: { flexDirection: 'row', justifyContent: 'space-between' },
+  statLabel: { ...Typography.caption, color: Colors.onSurfaceSecondary },
+  statVal: { ...Typography.bodySm, color: Colors.onSurface, fontWeight: '600' },
+
+  tipCard: { backgroundColor: Colors.primaryDim, borderRadius: BorderRadius.md, padding: Spacing.md, flexDirection: 'row', gap: Spacing.md, alignItems: 'flex-start', borderWidth: 1, borderColor: Colors.primary + '25' },
+  tipIcon: { width: 34, height: 34, borderRadius: 10, backgroundColor: Colors.primaryContainer, justifyContent: 'center', alignItems: 'center' },
+  tipBody: { flex: 1, gap: 3 },
+  tipTitle: { ...Typography.bodySm, color: Colors.primary, fontWeight: '700' },
+  tipText: { ...Typography.bodySm, color: Colors.onSurfaceSecondary, lineHeight: 20 },
 });
