@@ -2,7 +2,7 @@
 
 A React Native driving safety app that uses your phone's onboard sensors to score your driving in real time. Built with Expo SDK 56.
 
----
+Demo video: https://x.com/jaaaani404/status/2063932950937555147?s=20V
 
 ## What it does
 
